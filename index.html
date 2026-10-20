@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#d94f3d">
+<meta name="theme-color" content="#f2ece1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a1714" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="面迹">
@@ -60,7 +61,7 @@
 
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark">🍜</span>
+    <span class="brand-seal">面</span>
     <div>
       <h1>面迹</h1>
       <p>一碗面的手帐</p>
@@ -80,7 +81,7 @@
         <svg><use href="#i-search"/></svg>
         <input id="search" type="search" placeholder="搜店名、面名、城市、笔记" autocomplete="off">
       </label>
-      <div class="chips" id="type-filter"></div>
+      <div class="filter-tabs" id="type-filter"></div>
       <div class="list-summary" id="list-summary"></div>
     </div>
     <div class="cards" id="cards"></div>
@@ -114,7 +115,7 @@
     <svg><use href="#i-list"/></svg><span>记录</span>
   </button>
   <button class="fab" id="btn-add" aria-label="记一碗">
-    <svg><use href="#i-plus"/></svg>
+    <span class="fab-char">记</span>
   </button>
   <button data-view="map">
     <svg><use href="#i-map"/></svg><span>地图</span>

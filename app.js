@@ -158,11 +158,11 @@ function filteredRecords() {
 function renderFilterChips() {
   const wrap = $('#type-filter');
   const chips = [
-    `<button class="chip ${state.filter.kind === 'all' ? 'active' : ''}" data-kind="all" data-value="">全部</button>`,
+    `<button class="filter-tab ${state.filter.kind === 'all' ? 'active' : ''}" data-kind="all" data-value="">全部</button>`,
   ];
   allTypes().forEach(t => {
     const on = state.filter.kind === 'type' && state.filter.value === t;
-    chips.push(`<button class="chip ${on ? 'active' : ''}" data-kind="type" data-value="${escapeHtml(t)}">${escapeHtml(t)}</button>`);
+    chips.push(`<button class="filter-tab ${on ? 'active' : ''}" data-kind="type" data-value="${escapeHtml(t)}">${escapeHtml(t)}</button>`);
   });
   const shownTags = allTags().slice(0, 8);
   // Keep an active tag visible even if it fell out of the top list.
@@ -171,9 +171,28 @@ function renderFilterChips() {
   }
   shownTags.forEach(({ name }) => {
     const on = state.filter.kind === 'tag' && state.filter.value === name;
-    chips.push(`<button class="chip ${on ? 'active' : ''}" data-kind="tag" data-value="${escapeHtml(name)}">#${escapeHtml(name)}</button>`);
+    chips.push(`<button class="filter-tab ${on ? 'active' : ''}" data-kind="tag" data-value="${escapeHtml(name)}">#${escapeHtml(name)}</button>`);
   });
   wrap.innerHTML = chips.join('');
+}
+
+const CN_DIGITS = '〇一二三四五六七八九';
+const CN_MONTHS = ['', '一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
+
+function cnYear(year) {
+  return String(year).split('').map(d => CN_DIGITS[Number(d)] ?? d).join('') + '年';
+}
+
+function cnMonth(month) {
+  return CN_MONTHS[Number(month)] || `${Number(month)}月`;
+}
+
+function entryDate(dateStr) {
+  if (!dateStr) return { md: '——', wd: '' };
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dt.getDay()] || '';
+  return { md: `${m}.${d}`, wd };
 }
 
 function renderList() {
@@ -191,17 +210,40 @@ function renderList() {
     empty.querySelector('p').textContent = '吃过的好面，值得记下来。';
     $('#empty-add').hidden = false;
   }
-  cards.innerHTML = list.map(cardHtml).join('');
 
-  const total = filteredRecords().length;
+  if (!list.length) {
+    cards.innerHTML = '';
+    $('#list-summary').textContent = '';
+    return;
+  }
+
+  const groups = new Map();
+  list.forEach(r => {
+    const key = (r.date || '').slice(0, 7) || '0000-00';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  });
+
+  cards.innerHTML = Array.from(groups.entries()).map(([key, rows]) => {
+    const [y, m] = key.split('-');
+    const title = key === '0000-00'
+      ? '未记日期'
+      : `${cnYear(y)} <span>${cnMonth(m)}</span>`;
+    return `
+      <section class="month">
+        <h2 class="month-title">${title}</h2>
+        <div class="entries">${rows.map(entryHtml).join('')}</div>
+      </section>`;
+  }).join('');
+
   const shops = new Set(list.map(r => r.shop)).size;
   const spent = list.reduce((sum, r) => sum + (Number(r.price) || 0), 0);
-  const parts = [`${total} 碗`];
-  if (shops && total) parts.push(`${shops} 家店`);
+  const parts = [`共 ${list.length} 碗`];
+  if (shops) parts.push(`${shops} 家店`);
   if (spent) parts.push(`¥${spent}`);
-  $('#list-summary').textContent = total ? parts.join(' · ') : '';
+  $('#list-summary').textContent = parts.join(' · ');
 
-  cards.querySelectorAll('.card').forEach(el => {
+  cards.querySelectorAll('.entry').forEach(el => {
     el.addEventListener('click', e => {
       const rec = state.records.find(r => r.id === el.dataset.id);
       if (!rec) return;
@@ -212,41 +254,122 @@ function renderList() {
       openForm(rec);
     });
   });
+
+  requestAnimationFrame(drawNoodleStrand);
 }
 
-function cardHtml(r) {
+function entryHtml(r) {
   const title = r.dish || r.type || '一碗面';
-  const emoji = TYPE_EMOJI[r.type] || '🍜';
-  const mediaStyle = r.photo ? ` style="background-image:url('${r.photo}')"` : '';
-  const meta = [];
-  if (r.type) meta.push(`<span class="type-tag">${escapeHtml(r.type)}</span>`);
+  const { md, wd } = entryDate(r.date);
+  const meta = [`<span>@${escapeHtml(r.shop)}</span>`];
   if (r.city) meta.push(`<span>${escapeHtml(r.city)}</span>`);
-  meta.push(`<span>${formatDate(r.date)}</span>`);
-  if (r.price != null && r.price !== '') meta.push(`<span class="sep">·</span><span>¥${escapeHtml(r.price)}</span>`);
+  if (r.price != null && r.price !== '') meta.push(`<span>¥${escapeHtml(r.price)}</span>`);
 
-  const tags = r.tags || [];
-  const tagPills = tags.slice(0, 4).map(t => `<span class="tag-pill">#${escapeHtml(t)}</span>`).join('')
-    + (tags.length > 4 ? `<span class="tag-pill">+${tags.length - 4}</span>` : '');
+  const tagLine = (r.tags || []).slice(0, 5).map(t => `#${escapeHtml(t)}`).join('  ');
+  const thumb = r.photo ? `<img class="entry-thumb" src="${r.photo}" alt="" loading="lazy">` : '';
 
   return `
-    <article class="card" data-id="${escapeHtml(r.id)}">
-      <button class="card-share" data-share="${escapeHtml(r.id)}" aria-label="分享这碗">
-        <svg><use href="#i-share"/></svg>
-      </button>
-      <div class="card-media${r.photo ? '' : ' no-photo'}"${mediaStyle}>${r.photo ? '' : emoji}</div>
-      <div class="card-body">
-        <div class="card-row">
-          <div>
-            <div class="card-title">${escapeHtml(title)}</div>
-            <div class="card-sub">@${escapeHtml(r.shop)}</div>
-          </div>
-          ${bowlsHtml(Number(r.rating) || 0)}
+    <article class="entry" data-id="${escapeHtml(r.id)}">
+      <div class="entry-body">
+        <div class="entry-top">
+          <span class="entry-date">${md}${wd ? `<span class="wd">${wd}</span>` : ''}</span>
+          <span class="entry-top-right">
+            ${bowlsHtml(Number(r.rating) || 0)}
+            <button class="entry-share" data-share="${escapeHtml(r.id)}" aria-label="分享这碗">
+              <svg><use href="#i-share"/></svg>
+            </button>
+          </span>
         </div>
-        <div class="card-meta">${meta.join('')}</div>
-        ${tagPills ? `<div class="card-tags">${tagPills}</div>` : ''}
-        ${r.notes ? `<p class="card-note">${escapeHtml(r.notes)}</p>` : ''}
+        <div class="entry-head">
+          <h3 class="entry-title">${escapeHtml(title)}</h3>
+        </div>
+        <div class="entry-meta">${meta.join('<span class="dot">·</span>')}</div>
+        ${tagLine ? `<div class="entry-tags">${tagLine}</div>` : ''}
+        ${r.notes ? `<p class="entry-note">${escapeHtml(r.notes)}</p>` : ''}
       </div>
+      ${thumb}
     </article>`;
+}
+
+/* ---------------- Noodle strand ---------------- */
+
+function drawNoodleStrand() {
+  const cards = $('#cards');
+  if (!cards) return;
+  cards.querySelectorAll('.noodle-strand').forEach(el => el.remove());
+
+  const entries = Array.from(cards.querySelectorAll('.entry'));
+  const months = Array.from(cards.querySelectorAll('.month-title'));
+  if (!entries.length) return;
+
+  const cardsRect = cards.getBoundingClientRect();
+  if (cardsRect.height < 10) return;
+
+  const nodes = [];
+  entries.forEach(el => {
+    const r = el.getBoundingClientRect();
+    nodes.push({
+      y: r.top - cardsRect.top + 26,
+      kind: el.querySelector('.entry-thumb') ? 'drop' : 'ring',
+    });
+  });
+  months.forEach(el => {
+    const r = el.getBoundingClientRect();
+    nodes.push({ y: r.top - cardsRect.top + 18, kind: 'month' });
+  });
+  nodes.sort((a, b) => a.y - b.y);
+
+  const height = Math.max(120, Math.max(...nodes.map(n => n.y)) + 64);
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'noodle-strand');
+  svg.setAttribute('width', '60');
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('viewBox', `0 0 60 ${height}`);
+  svg.setAttribute('aria-hidden', 'true');
+
+  const X = 26;
+  const xAt = y => X
+    + 5.5 * Math.sin(y / 118 * Math.PI * 2 + 0.8)
+    + 2.2 * Math.sin(y / 47 * Math.PI * 2 + 2.1);
+
+  let d = '';
+  for (let y = 0; y <= height; y += 5) {
+    d += `${y === 0 ? 'M' : 'L'}${xAt(y).toFixed(2)} ${y} `;
+  }
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', d.trim());
+  path.setAttribute('class', 'strand');
+  svg.appendChild(path);
+
+  nodes.forEach(node => {
+    const x = xAt(node.y);
+
+    const link = document.createElementNS(NS, 'path');
+    link.setAttribute('d',
+      `M ${x.toFixed(2)} ${node.y} C ${(x + 10).toFixed(2)} ${node.y - 3}, 46 ${node.y + 3}, 58 ${node.y}`);
+    link.setAttribute('class', node.kind === 'month' ? 'strand-link month' : 'strand-link');
+    svg.appendChild(link);
+
+    if (node.kind === 'month') {
+      const rect = document.createElementNS(NS, 'rect');
+      rect.setAttribute('x', String(x - 3.5));
+      rect.setAttribute('y', String(node.y - 3.5));
+      rect.setAttribute('width', '7');
+      rect.setAttribute('height', '7');
+      rect.setAttribute('class', 'strand-month');
+      svg.appendChild(rect);
+    } else {
+      const dot = document.createElementNS(NS, 'circle');
+      dot.setAttribute('cx', x.toFixed(2));
+      dot.setAttribute('cy', String(node.y));
+      dot.setAttribute('r', '3.2');
+      dot.setAttribute('class', node.kind === 'drop' ? 'strand-drop' : 'strand-ring');
+      svg.appendChild(dot);
+    }
+  });
+
+  cards.prepend(svg);
 }
 
 /* ---------------- Views ---------------- */
@@ -822,37 +945,39 @@ function drawPoster(year, recs) {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
-  const font = (size, weight = '400') =>
+  const sans = (size, weight = '400') =>
     `${weight} ${size}px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif`;
+  const serif = (size, weight = '400') =>
+    `${weight} ${size}px "Songti SC","STSong","Noto Serif SC",serif`;
 
   // background
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#fbf7f2');
-  bg.addColorStop(1, '#f1e8dd');
+  bg.addColorStop(0, '#f7f1e6');
+  bg.addColorStop(1, '#ece2d3');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
   // watermark
-  ctx.fillStyle = 'rgba(217,79,61,.055)';
-  ctx.font = font(380, '700');
+  ctx.fillStyle = 'rgba(178,58,43,.05)';
+  ctx.font = serif(380, '700');
   ctx.textAlign = 'right';
   ctx.fillText('面', W - 40, 420);
   ctx.textAlign = 'left';
 
   // header
-  ctx.fillStyle = '#d94f3d';
-  ctx.font = font(26, '600');
+  ctx.fillStyle = '#b23a2b';
+  ctx.font = sans(26, '600');
   ctx.fillText('面迹 · NOODLE JOURNAL', M, 104);
 
-  ctx.fillStyle = '#2b2622';
-  ctx.font = font(150, '700');
+  ctx.fillStyle = '#26221d';
+  ctx.font = serif(150, '700');
   ctx.fillText(year, M - 4, 268);
 
-  ctx.fillStyle = '#6f665e';
-  ctx.font = font(44);
+  ctx.fillStyle = '#6b6257';
+  ctx.font = serif(44);
   ctx.fillText('我的吃面年报', M, 332);
 
-  ctx.fillStyle = '#d94f3d';
+  ctx.fillStyle = '#b23a2b';
   ctx.fillRect(M, 366, 120, 6);
 
   // headline stats
@@ -868,26 +993,26 @@ function drawPoster(year, recs) {
   const colW = (W - 2 * M) / 4;
   stats.forEach(([label, value, unit], i) => {
     const x = M + i * colW;
-    ctx.fillStyle = '#2b2622';
-    ctx.font = font(58, '700');
+    ctx.fillStyle = '#26221d';
+    ctx.font = serif(58, '700');
     ctx.fillText(value, x, 488);
     const vw = ctx.measureText(value).width;
     if (unit) {
-      ctx.fillStyle = '#a39a91';
-      ctx.font = font(24);
+      ctx.fillStyle = '#9a9083';
+      ctx.font = sans(24);
       ctx.fillText(unit, x + vw + 6, 488);
     }
-    ctx.fillStyle = '#a39a91';
-    ctx.font = font(23);
+    ctx.fillStyle = '#9a9083';
+    ctx.font = sans(23);
     ctx.fillText(label, x, 528);
   });
 
   // section helper
   const section = (title, y) => {
-    ctx.fillStyle = '#d94f3d';
-    ctx.font = font(25, '600');
+    ctx.fillStyle = '#b23a2b';
+    ctx.font = serif(25, '600');
     ctx.fillText(title, M, y);
-    ctx.strokeStyle = '#e4d8cb';
+    ctx.strokeStyle = '#d8cec0';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(M, y + 24);
@@ -904,13 +1029,13 @@ function drawPoster(year, recs) {
   topShops.forEach(([shop, n], i) => {
     const y = 676 + i * 54;
     ctx.fillStyle = '#b8ada2';
-    ctx.font = font(23, '600');
+    ctx.font = serif(23, '600');
     ctx.fillText(String(i + 1).padStart(2, '0'), M, y);
-    ctx.fillStyle = '#2b2622';
-    ctx.font = font(32, '600');
+    ctx.fillStyle = '#26221d';
+    ctx.font = serif(32, '600');
     ctx.fillText(fitText(ctx, shop, 600), M + 56, y);
-    ctx.fillStyle = '#a39a91';
-    ctx.font = font(23);
+    ctx.fillStyle = '#9a9083';
+    ctx.font = sans(23);
     ctx.textAlign = 'right';
     ctx.fillText(`${n} 碗`, W - M, y);
     ctx.textAlign = 'left';
@@ -924,11 +1049,11 @@ function drawPoster(year, recs) {
   section('最爱的面型', 874);
   topTypes.forEach(([type, n], i) => {
     const y = 936 + i * 50;
-    ctx.fillStyle = '#2b2622';
-    ctx.font = font(30, '600');
+    ctx.fillStyle = '#26221d';
+    ctx.font = serif(30, '600');
     ctx.fillText(fitText(ctx, type, 620), M, y);
-    ctx.fillStyle = '#a39a91';
-    ctx.font = font(23);
+    ctx.fillStyle = '#9a9083';
+    ctx.font = sans(23);
     ctx.textAlign = 'right';
     ctx.fillText(`${n} 碗`, W - M, y);
     ctx.textAlign = 'left';
@@ -940,8 +1065,8 @@ function drawPoster(year, recs) {
   const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([t]) => `#${t}`);
 
   section('常用标签', 1104);
-  ctx.fillStyle = '#6f665e';
-  ctx.font = font(27);
+  ctx.fillStyle = '#6b6257';
+  ctx.font = sans(27);
   ctx.fillText(fitText(ctx, topTags.join('   ') || '还没有标签', W - 2 * M), M, 1152);
 
   // best bowl
@@ -952,23 +1077,23 @@ function drawPoster(year, recs) {
 
   section('年度最佳一碗', 1216);
   if (best) {
-    ctx.fillStyle = '#2b2622';
-    ctx.font = font(40, '700');
+    ctx.fillStyle = '#26221d';
+    ctx.font = serif(40, '700');
     ctx.fillText(fitText(ctx, best.dish || best.type, 700), M, 1286);
-    ctx.fillStyle = '#6f665e';
-    ctx.font = font(25);
+    ctx.fillStyle = '#6b6257';
+    ctx.font = sans(25);
     ctx.fillText(fitText(ctx, `@${best.shop} · 评分 ${best.rating}/5`, 700), M, 1326);
   } else {
-    ctx.fillStyle = '#a39a91';
-    ctx.font = font(26);
+    ctx.fillStyle = '#9a9083';
+    ctx.font = sans(26);
     ctx.fillText('还没有评分', M, 1286);
   }
 
   // footer
-  ctx.fillStyle = '#d94f3d';
+  ctx.fillStyle = '#b23a2b';
   ctx.fillRect(M, 1372, 52, 3);
-  ctx.fillStyle = '#a39a91';
-  ctx.font = font(23);
+  ctx.fillStyle = '#9a9083';
+  ctx.font = sans(23);
   ctx.fillText('一碗好面，一段路。', M, 1412);
   ctx.textAlign = 'right';
   ctx.fillText('面迹 · 一碗面的手帐', W - M, 1412);
@@ -1038,12 +1163,14 @@ async function drawBowlCard(rec) {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
-  const font = (size, weight = '400') =>
+  const sans = (size, weight = '400') =>
     `${weight} ${size}px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif`;
+  const serif = (size, weight = '400') =>
+    `${weight} ${size}px "Songti SC","STSong","Noto Serif SC",serif`;
 
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#fbf7f2');
-  bg.addColorStop(1, '#f1e8dd');
+  bg.addColorStop(0, '#f7f1e6');
+  bg.addColorStop(1, '#ece2d3');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
@@ -1063,11 +1190,11 @@ async function drawBowlCard(rec) {
     roundRectPath(ctx, pad, pad, photoW, photoH, 28);
     ctx.clip();
     const g = ctx.createLinearGradient(pad, pad, pad + photoW, pad + photoH);
-    g.addColorStop(0, '#f8e2d7');
-    g.addColorStop(1, '#f1c8b1');
+    g.addColorStop(0, '#f2e4d8');
+    g.addColorStop(1, '#e7cdb8');
     ctx.fillStyle = g;
     ctx.fillRect(pad, pad, photoW, photoH);
-    ctx.font = font(130);
+    ctx.font = sans(130);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(TYPE_EMOJI[rec.type] || '🍜', W / 2, pad + photoH / 2);
@@ -1076,8 +1203,8 @@ async function drawBowlCard(rec) {
     ctx.restore();
 
     // faint watermark fills the lower empty space
-    ctx.fillStyle = 'rgba(217,79,61,.045)';
-    ctx.font = font(360, '700');
+    ctx.fillStyle = 'rgba(178,58,43,.045)';
+    ctx.font = serif(360, '700');
     ctx.textAlign = 'right';
     ctx.fillText('面', W - 36, H - 110);
     ctx.textAlign = 'left';
@@ -1086,19 +1213,19 @@ async function drawBowlCard(rec) {
   const y0 = pad + photoH;
 
   // date · type
-  ctx.fillStyle = '#a39a91';
-  ctx.font = font(25);
+  ctx.fillStyle = '#9a9083';
+  ctx.font = sans(25);
   const dateText = (rec.date || '').replace(/-/g, '.');
   ctx.fillText([dateText, rec.type].filter(Boolean).join('  ·  '), M, y0 + 56);
 
   // dish
-  ctx.fillStyle = '#2b2622';
-  ctx.font = font(64, '700');
+  ctx.fillStyle = '#26221d';
+  ctx.font = serif(64, '700');
   ctx.fillText(fitText(ctx, rec.dish || rec.type || '一碗面', W - 2 * M), M, y0 + 136);
 
   // shop
-  ctx.fillStyle = '#d94f3d';
-  ctx.font = font(32, '600');
+  ctx.fillStyle = '#b23a2b';
+  ctx.font = serif(32, '600');
   ctx.fillText(fitText(ctx, `@${rec.shop}`, W - 2 * M), M, y0 + 192);
 
   // rating bowls
@@ -1108,30 +1235,30 @@ async function drawBowlCard(rec) {
     const x = M + i * 44;
     ctx.beginPath();
     ctx.arc(x + 14, ry, 14, 0, Math.PI, false);
-    ctx.fillStyle = i < rating ? '#d94f3d' : '#e6ddd3';
+    ctx.fillStyle = i < rating ? '#b23a2b' : '#ddd3c5';
     ctx.fill();
     ctx.beginPath();
     ctx.moveTo(x, ry);
     ctx.lineTo(x + 28, ry);
-    ctx.strokeStyle = i < rating ? '#d94f3d' : '#e6ddd3';
+    ctx.strokeStyle = i < rating ? '#b23a2b' : '#ddd3c5';
     ctx.lineWidth = 3;
     ctx.stroke();
   }
-  ctx.fillStyle = '#a39a91';
-  ctx.font = font(24);
+  ctx.fillStyle = '#9a9083';
+  ctx.font = sans(24);
   ctx.fillText(rating ? `${rating}/5` : '未评分', M + 5 * 44 + 12, ry + 2);
 
   // tags
   const tags = (rec.tags || []).map(t => `#${t}`).join('   ');
   if (tags) {
-    ctx.fillStyle = '#6f665e';
-    ctx.font = font(27);
+    ctx.fillStyle = '#6b6257';
+    ctx.font = sans(27);
     ctx.fillText(fitText(ctx, tags, W - 2 * M), M, y0 + 314);
   }
 
   // divider
   const divY = y0 + (tags ? 356 : 300);
-  ctx.strokeStyle = '#e4d8cb';
+  ctx.strokeStyle = '#d8cec0';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(M, divY);
@@ -1140,8 +1267,8 @@ async function drawBowlCard(rec) {
 
   // notes
   if (rec.notes) {
-    ctx.fillStyle = '#4a423b';
-    ctx.font = font(31);
+    ctx.fillStyle = '#3f382f';
+    ctx.font = sans(31);
     const lines = wrapText(ctx, rec.notes, W - 2 * M, img ? 4 : 5);
     lines.forEach((line, i) => ctx.fillText(line, M, divY + 62 + i * 50));
   }
@@ -1149,24 +1276,24 @@ async function drawBowlCard(rec) {
   // price / place
   const metaY = 1300;
   if (rec.price != null && rec.price !== '') {
-    ctx.fillStyle = '#2b2622';
-    ctx.font = font(32, '700');
+    ctx.fillStyle = '#26221d';
+    ctx.font = serif(32, '700');
     ctx.fillText(`¥${rec.price}`, M, metaY);
   }
   const place = [rec.city, (rec.lat != null && rec.lng != null) ? '已定位' : ''].filter(Boolean).join(' · ');
   if (place) {
-    ctx.fillStyle = '#a39a91';
-    ctx.font = font(25);
+    ctx.fillStyle = '#9a9083';
+    ctx.font = sans(25);
     ctx.textAlign = 'right';
     ctx.fillText(place, W - M, metaY);
     ctx.textAlign = 'left';
   }
 
   // footer
-  ctx.fillStyle = '#d94f3d';
+  ctx.fillStyle = '#b23a2b';
   ctx.fillRect(M, 1372, 52, 3);
-  ctx.fillStyle = '#a39a91';
-  ctx.font = font(23);
+  ctx.fillStyle = '#9a9083';
+  ctx.font = sans(23);
   ctx.fillText('一碗好面，一段路。', M, 1412);
   ctx.textAlign = 'right';
   ctx.fillText('面迹 · 一碗面的手帐', W - M, 1412);
@@ -1487,6 +1614,17 @@ async function init() {
   renderFilterChips();
   renderTypePicker();
   renderList();
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => {
+      if (state.view === 'list') drawNoodleStrand();
+    }).observe($('#cards'));
+  }
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      if (state.view === 'list') drawNoodleStrand();
+    });
+  }
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
