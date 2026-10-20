@@ -1,6 +1,6 @@
 // App-shell cache. Bump CACHE on every deploy that touches shell files,
 // so the new version installs atomically instead of mixing old/new files.
-const CACHE = 'mianji-v3';
+const CACHE = 'mianji-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -13,10 +13,21 @@ const ASSETS = [
   './icons/apple-touch-icon.png',
 ];
 
+// Query-string the precache URLs so the install cannot be served stale
+// files from the browser HTTP cache (GitHub Pages sets max-age).
+const PRECACHE = ASSETS.map(url => `${url}${url.includes('?') ? '&' : '?'}v=${CACHE}`);
+
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())
-  );
+  // Cache files one by one so a single flaky request cannot block the update.
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await Promise.allSettled(PRECACHE.map(url =>
+      fetch(new Request(url, { cache: 'reload' })).then(res => {
+        if (res && res.ok) return cache.put(url, res);
+      })
+    ));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', event => {
@@ -35,7 +46,8 @@ self.addEventListener('fetch', event => {
   if (url.origin !== location.origin) return; // tiles / CDN stay online-only
 
   // Stale-while-revalidate: answer from cache immediately, refresh in background.
-  const network = fetch(req).then(res => {
+  // no-cache forces HTTP revalidation so a deploy can't stick behind max-age.
+  const network = fetch(req, { cache: 'no-cache' }).then(res => {
     if (res && res.ok) {
       const copy = res.clone();
       caches.open(CACHE).then(cache => cache.put(req, copy));
@@ -46,11 +58,11 @@ self.addEventListener('fetch', event => {
   event.waitUntil(network);
 
   event.respondWith(
-    caches.match(req).then(cached => {
+    caches.match(req, { ignoreSearch: true }).then(cached => {
       if (cached) return cached;
       return network.then(fresh => {
         if (fresh) return fresh;
-        if (req.mode === 'navigate') return caches.match('./index.html');
+        if (req.mode === 'navigate') return caches.match('./index.html', { ignoreSearch: true });
         return Response.error();
       });
     })

@@ -530,9 +530,13 @@ function renderCities() {
   const rows = collectCities();
 
   if (!rows.length) {
+    const total = state.records.length;
+    const msg = total
+      ? `还有 ${total} 碗面没填城市。点开记录，在「城市 / 地点」里补上，就会出现在这里。`
+      : '记录时填上城市，这里就会攒下一份足迹。';
     el.innerHTML = `
       <div class="city-head"><h2>去过的城市</h2></div>
-      <div class="stats-empty">记录时填上城市，这里就会攒下一份足迹。</div>`;
+      <div class="stats-empty">${msg}</div>`;
     return;
   }
 
@@ -1193,6 +1197,9 @@ async function sharePoster() {
 /* ---------------- Menu / backup ---------------- */
 
 function openMenu() {
+  const total = state.records.length;
+  const withCity = state.records.filter(r => (r.city || '').trim()).length;
+  $('#menu-meta').textContent = `共 ${total} 碗记录 · ${withCity} 碗填了城市`;
   $('#menu-sheet').hidden = false;
   $('#backdrop').hidden = false;
 }
@@ -1438,6 +1445,7 @@ async function init() {
   renderFilterChips();
   renderTypePicker();
   renderList();
+  renderActiveView();
 
   if (window.ResizeObserver) {
     new ResizeObserver(() => {
@@ -1460,7 +1468,12 @@ async function init() {
       reloading = true;
       location.reload();
     });
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    }).catch(() => {});
   }
 }
 
