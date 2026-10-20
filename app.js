@@ -206,14 +206,24 @@ function initMap() {
 }
 
 function renderMap() {
-  if (!map) {
-    $('#map-empty').hidden = false;
-    return;
-  }
   const located = state.records.filter(r =>
     r.lat != null && r.lng != null &&
     Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lng))
   );
+
+  if (!map) {
+    const empty = $('#map-empty');
+    empty.hidden = false;
+    if (located.length) {
+      empty.querySelector('h2').textContent = '地图需要联网';
+      empty.querySelector('p').textContent = '记录和坐标都在，联网后就能看到。';
+    } else {
+      empty.querySelector('h2').textContent = '还没有带位置的面';
+      empty.querySelector('p').textContent = '记录时点「用当前位置」，就能在地图上点亮它。';
+    }
+    return;
+  }
+
   $('#map-empty').hidden = located.length > 0;
   markerLayer.clearLayers();
   if (!located.length) return;
