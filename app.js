@@ -266,19 +266,21 @@ function entryHtml(r) {
   if (r.price != null && r.price !== '') meta.push(`<span>¥${escapeHtml(r.price)}</span>`);
 
   const tagLine = (r.tags || []).slice(0, 5).map(t => `#${escapeHtml(t)}`).join('  ');
-  const thumb = r.photo ? `<img class="entry-thumb" src="${r.photo}" alt="" loading="lazy">` : '';
+  const mediaStyle = r.photo ? ` style="background-image:url('${r.photo}')"` : '';
+  const emoji = TYPE_EMOJI[r.type] || '🍜';
 
   return `
     <article class="entry" data-id="${escapeHtml(r.id)}">
+      <div class="entry-media${r.photo ? '' : ' no-photo'}"${mediaStyle}>
+        ${r.photo ? '' : `<span class="entry-emoji">${emoji}</span>`}
+        <button class="entry-share" data-share="${escapeHtml(r.id)}" aria-label="分享这碗">
+          <svg><use href="#i-share"/></svg>
+        </button>
+      </div>
       <div class="entry-body">
         <div class="entry-top">
           <span class="entry-date">${md}${wd ? `<span class="wd">${wd}</span>` : ''}</span>
-          <span class="entry-top-right">
-            ${bowlsHtml(Number(r.rating) || 0)}
-            <button class="entry-share" data-share="${escapeHtml(r.id)}" aria-label="分享这碗">
-              <svg><use href="#i-share"/></svg>
-            </button>
-          </span>
+          ${bowlsHtml(Number(r.rating) || 0)}
         </div>
         <div class="entry-head">
           <h3 class="entry-title">${escapeHtml(title)}</h3>
@@ -287,7 +289,6 @@ function entryHtml(r) {
         ${tagLine ? `<div class="entry-tags">${tagLine}</div>` : ''}
         ${r.notes ? `<p class="entry-note">${escapeHtml(r.notes)}</p>` : ''}
       </div>
-      ${thumb}
     </article>`;
 }
 
@@ -310,7 +311,7 @@ function drawNoodleStrand() {
     const r = el.getBoundingClientRect();
     nodes.push({
       y: r.top - cardsRect.top + 26,
-      kind: el.querySelector('.entry-thumb') ? 'drop' : 'ring',
+      kind: el.querySelector('.entry-media:not(.no-photo)') ? 'drop' : 'ring',
     });
   });
   months.forEach(el => {
