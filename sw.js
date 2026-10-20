@@ -1,5 +1,5 @@
-// App-shell cache. Bump CACHE when shipping a new version.
-const CACHE = 'mianji-v1';
+// App-shell cache. Bump CACHE when changing precache rules.
+const CACHE = 'mianji-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -33,19 +33,25 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return; // tiles / CDN stay online-only
 
-  if (req.mode === 'navigate') {
-    event.respondWith(
-      fetch(req).catch(() => caches.match('./index.html'))
-    );
-    return;
-  }
-
-  // Network-first keeps local edits visible; cache is the offline fallback.
-  event.respondWith(
-    fetch(req).then(res => {
+  // Stale-while-revalidate: answer from cache immediately, refresh in background.
+  const network = fetch(req).then(res => {
+    if (res && res.ok) {
       const copy = res.clone();
       caches.open(CACHE).then(cache => cache.put(req, copy));
-      return res;
-    }).catch(() => caches.match(req))
+    }
+    return res;
+  }).catch(() => null);
+
+  event.waitUntil(network);
+
+  event.respondWith(
+    caches.match(req).then(cached => {
+      if (cached) return cached;
+      return network.then(fresh => {
+        if (fresh) return fresh;
+        if (req.mode === 'navigate') return caches.match('./index.html');
+        return Response.error();
+      });
+    })
   );
 });
