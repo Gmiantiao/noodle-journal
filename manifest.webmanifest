@@ -1,0 +1,17 @@
+{
+  "name": "面迹 · 一碗面的手帐",
+  "short_name": "面迹",
+  "description": "记录每一碗吃过的面：店、面、评分、价格、地点和一句话。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f2ed",
+  "theme_color": "#d94f3d",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

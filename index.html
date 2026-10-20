@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#d94f3d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="面迹">
+<title>面迹 · 一碗面的手帐</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Inline icons -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-bowl" viewBox="0 0 24 24">
+    <path d="M3 11h18a9 9 0 0 1-4.2 7.6 3 3 0 0 1-1.8.6H9a3 3 0 0 1-1.8-.6A9 9 0 0 1 3 11Z"/>
+    <path d="M7 7.5c0-1.2 1-1.8 1-3M12 7.5c0-1.2 1-1.8 1-3M17 7.5c0-1.2 1-1.8 1-3" class="steam"/>
+  </symbol>
+  <symbol id="i-list" viewBox="0 0 24 24">
+    <path d="M4 6h16M4 12h16M4 18h16"/>
+  </symbol>
+  <symbol id="i-map" viewBox="0 0 24 24">
+    <path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24">
+    <path d="M5 20V10M12 20V4M19 20v-7"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24">
+    <path d="M12 5v14M5 12h14"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24">
+    <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+  </symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24">
+    <path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/>
+  </symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24">
+    <path d="M4 8h3l1.5-2h7L17 8h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/>
+  </symbol>
+  <symbol id="i-x" viewBox="0 0 24 24">
+    <path d="m6 6 12 12M18 6 6 18"/>
+  </symbol>
+  <symbol id="i-more" viewBox="0 0 24 24">
+    <circle cx="5" cy="12" r="1.5" class="dot"/><circle cx="12" cy="12" r="1.5" class="dot"/><circle cx="19" cy="12" r="1.5" class="dot"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24">
+    <path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"/>
+  </symbol>
+</svg>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">🍜</span>
+    <div>
+      <h1>面迹</h1>
+      <p>一碗面的手帐</p>
+    </div>
+  </div>
+  <button class="icon-btn" id="btn-menu" aria-label="更多">
+    <svg><use href="#i-more"/></svg>
+  </button>
+</header>
+
+<main id="main">
+
+  <!-- ===================== List ===================== -->
+  <section class="view active" id="view-list">
+    <div class="list-tools">
+      <label class="search">
+        <svg><use href="#i-search"/></svg>
+        <input id="search" type="search" placeholder="搜店名、面名、城市、笔记" autocomplete="off">
+      </label>
+      <div class="chips" id="type-filter"></div>
+      <div class="list-summary" id="list-summary"></div>
+    </div>
+    <div class="cards" id="cards"></div>
+    <div class="empty" id="empty-list" hidden>
+      <div class="empty-icon">🍜</div>
+      <h2>还没有第一碗</h2>
+      <p>吃过的好面，值得记下来。</p>
+      <button class="btn primary" id="empty-add">记一碗</button>
+    </div>
+  </section>
+
+  <!-- ===================== Map ===================== -->
+  <section class="view" id="view-map">
+    <div id="map"></div>
+    <div class="map-empty" id="map-empty" hidden>
+      <div class="empty-icon">📍</div>
+      <h2>还没有带位置的面</h2>
+      <p>记录时点「用当前位置」，就能在地图上点亮它。</p>
+    </div>
+  </section>
+
+  <!-- ===================== Stats ===================== -->
+  <section class="view" id="view-stats">
+    <div class="stats" id="stats"></div>
+  </section>
+
+</main>
+
+<nav class="tabbar" id="tabbar">
+  <button data-view="list" class="active">
+    <svg><use href="#i-list"/></svg><span>记录</span>
+  </button>
+  <button class="fab" id="btn-add" aria-label="记一碗">
+    <svg><use href="#i-plus"/></svg>
+  </button>
+  <button data-view="map">
+    <svg><use href="#i-map"/></svg><span>地图</span>
+  </button>
+  <button data-view="stats">
+    <svg><use href="#i-chart"/></svg><span>统计</span>
+  </button>
+</nav>
+
+<!-- ===================== Form sheet ===================== -->
+<section class="sheet form-sheet" id="form-sheet" hidden>
+  <header class="sheet-head">
+    <button class="text-btn" id="form-cancel">取消</button>
+    <h2 id="form-title">记一碗</h2>
+    <button class="text-btn strong" id="form-save">保存</button>
+  </header>
+
+  <form id="record-form" class="form-body" autocomplete="off">
+    <input type="hidden" id="f-id">
+
+    <div class="photo-field">
+      <input type="file" id="f-photo" accept="image/*" hidden>
+      <button type="button" class="photo-add" id="photo-add">
+        <svg><use href="#i-camera"/></svg>
+        <span>拍一张，或从相册选</span>
+      </button>
+      <div class="photo-preview" id="photo-preview" hidden>
+        <img id="photo-img" alt="">
+        <button type="button" class="photo-remove" id="photo-remove" aria-label="移除照片">
+          <svg><use href="#i-x"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="f-shop">店名 <em>必填</em></label>
+      <input id="f-shop" type="text" placeholder="例：彬彬面馆" required>
+    </div>
+
+    <div class="field">
+      <label for="f-dish">这碗面</label>
+      <input id="f-dish" type="text" placeholder="例：红烧牛肉面">
+    </div>
+
+    <div class="field">
+      <label>类型</label>
+      <div class="chips" id="type-picker"></div>
+    </div>
+
+    <div class="field">
+      <label>好吃程度 <span class="rating-label" id="rating-label"></span></label>
+      <div class="rating-picker" id="rating-picker"></div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="f-price">价格（元）</label>
+        <input id="f-price" type="number" inputmode="decimal" min="0" step="1" placeholder="0">
+      </div>
+      <div class="field">
+        <label for="f-date">日期</label>
+        <input id="f-date" type="date">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="f-city">城市 / 地点</label>
+      <div class="input-with-btn">
+        <input id="f-city" type="text" placeholder="例：温州苍南">
+        <button type="button" class="mini-btn" id="btn-geo">
+          <svg><use href="#i-pin"/></svg>定位
+        </button>
+      </div>
+      <p class="hint" id="geo-hint" hidden>已记下坐标，地图上会点亮</p>
+    </div>
+
+    <div class="field">
+      <label for="f-notes">一句话感受</label>
+      <textarea id="f-notes" rows="3" placeholder="汤头、面条、当时的心情……"></textarea>
+    </div>
+
+    <button type="button" class="danger-link" id="form-delete" hidden>
+      <svg><use href="#i-trash"/></svg>删除这碗
+    </button>
+  </form>
+</section>
+
+<!-- ===================== Menu sheet ===================== -->
+<section class="sheet menu-sheet" id="menu-sheet" hidden>
+  <div class="sheet-grab"></div>
+  <h2>面迹</h2>
+  <div class="menu-list">
+    <button id="btn-export">导出备份（JSON）</button>
+    <button id="btn-import">导入备份</button>
+    <button id="btn-clear" class="danger">清空所有记录</button>
+  </div>
+  <p class="menu-note">所有记录只存在这台设备上。不会上传，也不会同步——换设备记得先导出。</p>
+  <input type="file" id="import-file" accept="application/json,.json" hidden>
+</section>
+
+<div class="backdrop" id="backdrop" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

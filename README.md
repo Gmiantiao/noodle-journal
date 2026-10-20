@@ -1,0 +1,60 @@
+# 面迹 · 一碗面的手帐
+
+记录在各地吃过的面：店名、面名、类型、评分、价格、地点、照片和一句话。
+纯前端 PWA，数据只存在当前设备的浏览器里，不登录、不上传、不需要后端。
+
+## 本地运行
+
+```bash
+cd noodle-journal
+python3 -m http.server 8000
+```
+
+打开 <http://localhost:8000>。手机连同一 Wi-Fi 时可以用电脑的局域网 IP 访问，
+但**定位和离线安装需要 HTTPS**（iOS Safari 的限制），局域网 HTTP 下只能看和记，不能定位。
+
+## 装到 iPhone 上
+
+1. 把这个目录部署到任意 HTTPS 静态托管（GitHub Pages / Cloudflare Pages / Vercel 都行）。
+2. iPhone Safari 打开网址 → 分享 → **添加到主屏幕**。
+3. 从主屏幕启动，就是全屏 App，断网也能用。
+
+> 数据按「域名 + 浏览器」隔离。换域名、换浏览器等于换一个空数据库，**换之前先导出备份**。
+
+## 数据
+
+- 存在浏览器 IndexedDB（`noodle-journal` 数据库），照片压缩后一起存本地。
+- 右上角 `⋯` → 导出备份（JSON）。iOS 独立模式下会走系统分享，存到「文件」或发给微信。
+- 导入会按 `id` 去重，同一条记录不会重复添加。
+- 清空不可撤销。
+
+## 文件
+
+```
+index.html          页面骨架 + 内联 SVG 图标
+styles.css          样式（浅色/深色自动跟随系统）
+app.js              视图、表单、统计、地图、导入导出
+db.js               IndexedDB 封装
+sw.js               Service Worker，缓存应用外壳
+manifest.webmanifest
+icons/              主屏幕图标
+mockup/index.html   7 月的设计原型（保留，不参与运行）
+```
+
+## 当前范围
+
+已做：记录增删改、类型筛选、搜索、拍照/相册、5 档碗评分、定位、地图、
+按月统计、常去店铺、年度分布、JSON 导入导出、离线缓存、深浅色。
+
+没做（可作为下一步）：
+
+- 照片主体抠图做贴纸（浏览器端可用 ONNX 模型，首次需下载几 MB）
+- 多设备同步（现在纯本地）
+- 把 `food-journal/entries/` 的旧记录批量导入（那些是「想去的店」，字段不同）
+- 年度海报分享图
+- 用 Capacitor 套壳上架 App Store（需要 Apple 开发者账号和一台能跑新 Xcode 的 Mac）
+
+## 改名
+
+「面迹」出现在 `index.html` 的 `<title>`、顶部品牌、`manifest.webmanifest` 的 `name`/`short_name`，
+以及 `app.js` 的导出文件名里。要换名字改这几处即可。
