@@ -172,8 +172,28 @@ input, textarea { font: inherit; color: inherit; }
   cursor: pointer;
   transition: transform .15s;
   border: 1px solid transparent;
+  position: relative;
 }
 .card:active { transform: scale(.985); }
+
+.card-share {
+  position: absolute;
+  top: 10px; right: 10px;
+  z-index: 3;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,.82);
+  color: #5f564e;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0,0,0,.14);
+}
+@media (prefers-color-scheme: dark) {
+  .card-share { background: rgba(30,26,23,.72); color: #e8ded4; }
+}
+.card-share svg { width: 17px; height: 17px; }
+.card-share:active { transform: scale(.92); }
 
 .card-media {
   height: 168px;

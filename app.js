@@ -202,9 +202,14 @@ function renderList() {
   $('#list-summary').textContent = total ? parts.join(' · ') : '';
 
   cards.querySelectorAll('.card').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', e => {
       const rec = state.records.find(r => r.id === el.dataset.id);
-      if (rec) openForm(rec);
+      if (!rec) return;
+      if (e.target.closest('[data-share]')) {
+        openBowlCard(rec);
+        return;
+      }
+      openForm(rec);
     });
   });
 }
@@ -225,6 +230,9 @@ function cardHtml(r) {
 
   return `
     <article class="card" data-id="${escapeHtml(r.id)}">
+      <button class="card-share" data-share="${escapeHtml(r.id)}" aria-label="分享这碗">
+        <svg><use href="#i-share"/></svg>
+      </button>
       <div class="card-media${r.photo ? '' : ' no-photo'}"${mediaStyle}>${r.photo ? '' : emoji}</div>
       <div class="card-body">
         <div class="card-row">
@@ -969,6 +977,218 @@ function drawPoster(year, recs) {
   return canvas;
 }
 
+/* ---------------- Single bowl card ---------------- */
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function loadImageFromSrc(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function drawCover(ctx, img, x, y, w, h, r) {
+  ctx.save();
+  roundRectPath(ctx, x, y, w, h, r);
+  ctx.clip();
+  const scale = Math.max(w / img.width, h / img.height);
+  const dw = img.width * scale;
+  const dh = img.height * scale;
+  ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  ctx.restore();
+}
+
+function wrapText(ctx, text, maxWidth, maxLines) {
+  const lines = [];
+  let line = '';
+  const chars = Array.from(String(text || ''));
+  for (let i = 0; i < chars.length; i++) {
+    const test = line + chars[i];
+    if (line && ctx.measureText(test).width > maxWidth) {
+      lines.push(line);
+      line = chars[i];
+      if (lines.length === maxLines) {
+        let last = lines[maxLines - 1];
+        while (last && ctx.measureText(last + '…').width > maxWidth) last = last.slice(0, -1);
+        lines[maxLines - 1] = last + '…';
+        return lines;
+      }
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+async function drawBowlCard(rec) {
+  const W = 1080, H = 1440, M = 72;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const font = (size, weight = '400') =>
+    `${weight} ${size}px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif`;
+
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#fbf7f2');
+  bg.addColorStop(1, '#f1e8dd');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  let img = null;
+  if (rec.photo) {
+    try { img = await loadImageFromSrc(rec.photo); } catch (_) { img = null; }
+  }
+
+  const pad = M;
+  const photoW = W - 2 * M;
+  const photoH = img ? 600 : 440;
+
+  if (img) {
+    drawCover(ctx, img, pad, pad, photoW, photoH, 28);
+  } else {
+    ctx.save();
+    roundRectPath(ctx, pad, pad, photoW, photoH, 28);
+    ctx.clip();
+    const g = ctx.createLinearGradient(pad, pad, pad + photoW, pad + photoH);
+    g.addColorStop(0, '#f8e2d7');
+    g.addColorStop(1, '#f1c8b1');
+    ctx.fillStyle = g;
+    ctx.fillRect(pad, pad, photoW, photoH);
+    ctx.font = font(130);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(TYPE_EMOJI[rec.type] || '🍜', W / 2, pad + photoH / 2);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+
+    // faint watermark fills the lower empty space
+    ctx.fillStyle = 'rgba(217,79,61,.045)';
+    ctx.font = font(360, '700');
+    ctx.textAlign = 'right';
+    ctx.fillText('面', W - 36, H - 110);
+    ctx.textAlign = 'left';
+  }
+
+  const y0 = pad + photoH;
+
+  // date · type
+  ctx.fillStyle = '#a39a91';
+  ctx.font = font(25);
+  const dateText = (rec.date || '').replace(/-/g, '.');
+  ctx.fillText([dateText, rec.type].filter(Boolean).join('  ·  '), M, y0 + 56);
+
+  // dish
+  ctx.fillStyle = '#2b2622';
+  ctx.font = font(64, '700');
+  ctx.fillText(fitText(ctx, rec.dish || rec.type || '一碗面', W - 2 * M), M, y0 + 136);
+
+  // shop
+  ctx.fillStyle = '#d94f3d';
+  ctx.font = font(32, '600');
+  ctx.fillText(fitText(ctx, `@${rec.shop}`, W - 2 * M), M, y0 + 192);
+
+  // rating bowls
+  const rating = Number(rec.rating) || 0;
+  const ry = y0 + 250;
+  for (let i = 0; i < 5; i++) {
+    const x = M + i * 44;
+    ctx.beginPath();
+    ctx.arc(x + 14, ry, 14, 0, Math.PI, false);
+    ctx.fillStyle = i < rating ? '#d94f3d' : '#e6ddd3';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x, ry);
+    ctx.lineTo(x + 28, ry);
+    ctx.strokeStyle = i < rating ? '#d94f3d' : '#e6ddd3';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#a39a91';
+  ctx.font = font(24);
+  ctx.fillText(rating ? `${rating}/5` : '未评分', M + 5 * 44 + 12, ry + 2);
+
+  // tags
+  const tags = (rec.tags || []).map(t => `#${t}`).join('   ');
+  if (tags) {
+    ctx.fillStyle = '#6f665e';
+    ctx.font = font(27);
+    ctx.fillText(fitText(ctx, tags, W - 2 * M), M, y0 + 314);
+  }
+
+  // divider
+  const divY = y0 + (tags ? 356 : 300);
+  ctx.strokeStyle = '#e4d8cb';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(M, divY);
+  ctx.lineTo(W - M, divY);
+  ctx.stroke();
+
+  // notes
+  if (rec.notes) {
+    ctx.fillStyle = '#4a423b';
+    ctx.font = font(31);
+    const lines = wrapText(ctx, rec.notes, W - 2 * M, img ? 4 : 5);
+    lines.forEach((line, i) => ctx.fillText(line, M, divY + 62 + i * 50));
+  }
+
+  // price / place
+  const metaY = 1300;
+  if (rec.price != null && rec.price !== '') {
+    ctx.fillStyle = '#2b2622';
+    ctx.font = font(32, '700');
+    ctx.fillText(`¥${rec.price}`, M, metaY);
+  }
+  const place = [rec.city, (rec.lat != null && rec.lng != null) ? '已定位' : ''].filter(Boolean).join(' · ');
+  if (place) {
+    ctx.fillStyle = '#a39a91';
+    ctx.font = font(25);
+    ctx.textAlign = 'right';
+    ctx.fillText(place, W - M, metaY);
+    ctx.textAlign = 'left';
+  }
+
+  // footer
+  ctx.fillStyle = '#d94f3d';
+  ctx.fillRect(M, 1372, 52, 3);
+  ctx.fillStyle = '#a39a91';
+  ctx.font = font(23);
+  ctx.fillText('一碗好面，一段路。', M, 1412);
+  ctx.textAlign = 'right';
+  ctx.fillText('面迹 · 一碗面的手帐', W - M, 1412);
+  ctx.textAlign = 'left';
+
+  return canvas;
+}
+
+async function openBowlCard(rec) {
+  try {
+    posterCanvas = await drawBowlCard(rec);
+    const name = [rec.dish || rec.shop, rec.date].filter(Boolean).join('-');
+    posterFileName = `面迹-${name}.png`;
+    $('#poster-sheet .sheet-head h2').textContent = '分享这碗';
+    $('#poster-img').src = posterCanvas.toDataURL('image/png');
+    $('#poster-sheet').hidden = false;
+  } catch (err) {
+    console.error(err);
+    toast('生成分享图失败');
+  }
+}
+
 function openPoster() {
   const year = posterYear();
   const recs = state.records.filter(r => (r.date || '').startsWith(year));
@@ -976,6 +1196,7 @@ function openPoster() {
 
   posterCanvas = drawPoster(year, recs);
   posterFileName = `面迹-${year}-年度海报.png`;
+  $('#poster-sheet .sheet-head h2').textContent = '年度海报';
   $('#poster-img').src = posterCanvas.toDataURL('image/png');
   $('#poster-sheet').hidden = false;
 }
