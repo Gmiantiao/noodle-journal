@@ -125,7 +125,6 @@ input, textarea { font: inherit; color: inherit; }
   padding-bottom: calc(var(--tab-h) + var(--safe-b) + 26px);
 }
 .view.active { display: block; }
-#view-map { padding-bottom: 0; overflow: hidden; }
 
 /* ---------------- List tools ---------------- */
 
@@ -780,6 +779,60 @@ input, textarea { font: inherit; color: inherit; }
 .stats-empty {
   text-align: center; color: var(--ink-3); font-size: 13px;
   padding: 36px 10px; letter-spacing: .5px;
+}
+
+/* ---------------- Cities ---------------- */
+
+.city-wrap { padding: 10px 20px 24px; }
+
+.city-head { padding: 8px 0 18px; border-bottom: 1px solid var(--rule); }
+.city-head h2 {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: var(--ink);
+}
+.city-head p {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  letter-spacing: 1px;
+}
+
+.city-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.city-row:last-child { border-bottom: none; }
+.city-row .c-idx {
+  font-family: var(--serif);
+  font-size: 11px;
+  color: var(--ink-3);
+  width: 20px;
+}
+.city-row .c-main { flex: 1; min-width: 0; }
+.city-row .c-name {
+  font-family: var(--serif);
+  font-size: 17px;
+  color: var(--ink);
+  letter-spacing: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.city-row .c-last {
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: .4px;
+}
+.city-row .c-count {
+  font-family: var(--serif);
+  font-size: 14px;
+  color: var(--seal);
+  white-space: nowrap;
 }
 
 /* ---------------- Bottom menu ---------------- */

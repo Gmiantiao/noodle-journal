@@ -25,6 +25,9 @@
   <symbol id="i-list" viewBox="0 0 24 24">
     <path d="M4 6h16M4 12h16M4 18h16"/>
   </symbol>
+  <symbol id="i-city" viewBox="0 0 24 24">
+    <path d="M3 20h18M5 20V9h6v11M11 20V5h6v15M7 12h2M7 16h2M13 9h2M13 13h2M17 10v10"/>
+  </symbol>
   <symbol id="i-chart" viewBox="0 0 24 24">
     <path d="M5 20V10M12 20V4M19 20v-7"/>
   </symbol>
@@ -85,6 +88,11 @@
     </div>
   </section>
 
+  <!-- ===================== Cities ===================== -->
+  <section class="view" id="view-city">
+    <div class="city-wrap" id="city-list"></div>
+  </section>
+
   <!-- ===================== Stats ===================== -->
   <section class="view" id="view-stats">
     <div class="stats" id="stats"></div>
@@ -98,6 +106,9 @@
   </button>
   <button class="fab" id="btn-add" aria-label="记一碗">
     <svg><use href="#i-plus"/></svg>
+  </button>
+  <button data-view="city">
+    <svg><use href="#i-city"/></svg><span>城市</span>
   </button>
   <button data-view="stats">
     <svg><use href="#i-chart"/></svg><span>统计</span>

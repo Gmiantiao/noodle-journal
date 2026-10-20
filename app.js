@@ -380,6 +380,7 @@ function showView(name) {
   $$('#tabbar [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
 
   if (name === 'stats') renderStats();
+  if (name === 'city') renderCities();
   if (name === 'list') renderList();
 }
 
@@ -425,14 +426,6 @@ function renderStats() {
   records.forEach(r => { shopCount[r.shop] = (shopCount[r.shop] || 0) + 1; });
   const topShops = Object.entries(shopCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-  const cityCount = {};
-  records.forEach(r => {
-    const c = (r.city || '').trim();
-    if (c) cityCount[c] = (cityCount[c] || 0) + 1;
-  });
-  const cityRows = Object.entries(cityCount)
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'));
-  const cityMax = Math.max(1, ...cityRows.map(c => c[1]));
 
   const tagCount = {};
   records.forEach(r => (r.tags || []).forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
@@ -503,19 +496,6 @@ function renderStats() {
       </div>
     </div>
 
-    ${cityRows.length ? `
-    <div class="panel">
-      <h3>去过的城市 <span class="h3-note">${cityRows.length} 座</span></h3>
-      <div class="bars">
-        ${cityRows.map(([city, n]) => `
-          <div class="bar-row">
-            <span class="b-label">${escapeHtml(city)}</span>
-            <span class="b-track"><span class="b-fill" style="width:${Math.round(n / cityMax * 100)}%"></span></span>
-            <span class="b-val">${n}</span>
-          </div>`).join('')}
-      </div>
-    </div>` : ''}
-
     <div class="panel">
       <h3>最好吃的几碗 <span class="h3-note">平均 ${avg} 分</span></h3>
       <div class="rank">
@@ -527,6 +507,57 @@ function renderStats() {
       </div>
     </div>
   `;
+}
+
+/* ---------------- Cities ---------------- */
+
+function collectCities() {
+  const map = new Map();
+  state.records.forEach(r => {
+    const city = (r.city || '').trim();
+    if (!city) return;
+    const row = map.get(city) || { city, count: 0, last: '' };
+    row.count++;
+    if ((r.date || '') > row.last) row.last = r.date || '';
+    map.set(city, row);
+  });
+  return Array.from(map.values())
+    .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city, 'zh-CN'));
+}
+
+function renderCities() {
+  const el = $('#city-list');
+  const rows = collectCities();
+
+  if (!rows.length) {
+    el.innerHTML = `
+      <div class="city-head"><h2>去过的城市</h2></div>
+      <div class="stats-empty">记录时填上城市，这里就会攒下一份足迹。</div>`;
+    return;
+  }
+
+  const bowls = rows.reduce((sum, r) => sum + r.count, 0);
+  el.innerHTML = `
+    <div class="city-head">
+      <h2>去过的城市</h2>
+      <p>${rows.length} 座 · ${bowls} 碗面</p>
+    </div>
+    <div class="city-list">
+      ${rows.map((r, i) => `
+        <div class="city-row">
+          <span class="c-idx">${String(i + 1).padStart(2, '0')}</span>
+          <div class="c-main">
+            <div class="c-name">${escapeHtml(r.city)}</div>
+            ${r.last ? `<div class="c-last">最近 ${formatDate(r.last)}</div>` : ''}
+          </div>
+          <span class="c-count">${r.count} 碗</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderActiveView() {
+  if (state.view === 'city') renderCities();
+  if (state.view === 'stats') renderStats();
 }
 
 /* ---------------- Form ---------------- */
@@ -674,6 +705,7 @@ async function handleSave() {
     await loadRecords();
     renderFilterChips();
     renderList();
+    renderActiveView();
     closeForm();
     toast(isEdit ? '已更新' : '已记下这一碗');
   } catch (err) {
@@ -690,6 +722,7 @@ async function handleDelete() {
     await deleteRecord(id);
     await loadRecords();
     renderList();
+    renderActiveView();
     closeForm();
     toast('已删除');
   } catch (err) {
@@ -1237,6 +1270,7 @@ async function importBackup(file) {
     await loadRecords();
     renderFilterChips();
     renderList();
+    renderActiveView();
     closeMenu();
     toast(`导入 ${added} 条记录`);
   } catch (err) {
@@ -1252,7 +1286,7 @@ async function clearAll() {
     await loadRecords();
     renderFilterChips();
     renderList();
-    renderStats();
+    renderActiveView();
     closeMenu();
     toast('已清空');
   } catch (err) {
