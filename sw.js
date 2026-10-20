@@ -1,5 +1,6 @@
-// App-shell cache. Bump CACHE when changing precache rules.
-const CACHE = 'mianji-v2';
+// App-shell cache. Bump CACHE on every deploy that touches shell files,
+// so the new version installs atomically instead of mixing old/new files.
+const CACHE = 'mianji-v3';
 const ASSETS = [
   './',
   './index.html',

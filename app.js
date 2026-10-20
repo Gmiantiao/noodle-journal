@@ -1451,6 +1451,15 @@ async function init() {
   }
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    // When a new shell takes over, reload once so index.html and app.js
+    // never run from different versions.
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloading) return;
+      reloading = true;
+      location.reload();
+    });
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 }
