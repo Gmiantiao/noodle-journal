@@ -12,7 +12,6 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -26,9 +25,6 @@
   <symbol id="i-list" viewBox="0 0 24 24">
     <path d="M4 6h16M4 12h16M4 18h16"/>
   </symbol>
-  <symbol id="i-map" viewBox="0 0 24 24">
-    <path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/>
-  </symbol>
   <symbol id="i-chart" viewBox="0 0 24 24">
     <path d="M5 20V10M12 20V4M19 20v-7"/>
   </symbol>
@@ -37,9 +33,6 @@
   </symbol>
   <symbol id="i-search" viewBox="0 0 24 24">
     <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
-  </symbol>
-  <symbol id="i-pin" viewBox="0 0 24 24">
-    <path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/>
   </symbol>
   <symbol id="i-camera" viewBox="0 0 24 24">
     <path d="M4 8h3l1.5-2h7L17 8h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/>
@@ -92,16 +85,6 @@
     </div>
   </section>
 
-  <!-- ===================== Map ===================== -->
-  <section class="view" id="view-map">
-    <div id="map"></div>
-    <div class="map-empty" id="map-empty" hidden>
-      <div class="empty-icon">📍</div>
-      <h2>还没有带位置的面</h2>
-      <p>记录时点「用当前位置」，就能在地图上点亮它。</p>
-    </div>
-  </section>
-
   <!-- ===================== Stats ===================== -->
   <section class="view" id="view-stats">
     <div class="stats" id="stats"></div>
@@ -115,9 +98,6 @@
   </button>
   <button class="fab" id="btn-add" aria-label="记一碗">
     <svg><use href="#i-plus"/></svg>
-  </button>
-  <button data-view="map">
-    <svg><use href="#i-map"/></svg><span>地图</span>
   </button>
   <button data-view="stats">
     <svg><use href="#i-chart"/></svg><span>统计</span>
@@ -196,16 +176,7 @@
 
     <div class="field">
       <label for="f-city">城市 / 地点</label>
-      <div class="input-with-btn loc-buttons">
-        <input id="f-city" type="text" placeholder="例：温州苍南">
-        <button type="button" class="mini-btn" id="btn-geo">
-          <svg><use href="#i-pin"/></svg>定位
-        </button>
-        <button type="button" class="mini-btn" id="btn-pick-loc">
-          <svg><use href="#i-map"/></svg>选位置
-        </button>
-      </div>
-      <p class="hint" id="geo-hint" hidden>已记下坐标，地图上会点亮</p>
+      <input id="f-city" type="text" placeholder="例：温州苍南">
     </div>
 
     <div class="field">
@@ -217,32 +188,6 @@
       <svg><use href="#i-trash"/></svg>删除这碗
     </button>
   </form>
-</section>
-
-<!-- ===================== Location picker ===================== -->
-<section class="sheet loc-sheet" id="loc-sheet" hidden>
-  <header class="sheet-head">
-    <button class="text-btn" id="loc-cancel">取消</button>
-    <h2>选位置</h2>
-    <button class="text-btn strong" id="loc-confirm">确定</button>
-  </header>
-  <div class="loc-wrap">
-    <div id="loc-map"></div>
-    <div class="loc-panel">
-      <p class="loc-readout" id="loc-readout">点地图选一个点，或直接填经纬度</p>
-      <div class="field-row">
-        <div class="field">
-          <label for="loc-lat">纬度</label>
-          <input id="loc-lat" type="number" step="0.000001" inputmode="decimal" placeholder="30.2741">
-        </div>
-        <div class="field">
-          <label for="loc-lng">经度</label>
-          <input id="loc-lng" type="number" step="0.000001" inputmode="decimal" placeholder="120.1551">
-        </div>
-      </div>
-      <p class="hint" id="loc-map-hint" hidden>地图需要联网；离线时可以手动填经纬度</p>
-    </div>
-  </div>
 </section>
 
 <!-- ===================== Poster sheet ===================== -->
@@ -273,7 +218,6 @@
 <div class="backdrop" id="backdrop" hidden></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

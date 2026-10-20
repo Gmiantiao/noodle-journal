@@ -22,7 +22,6 @@ const state = {
   view: 'list',
   editing: null,
   photo: null,
-  geo: null,
   rating: 4,
   type: '汤面',
   tags: [],
@@ -380,73 +379,8 @@ function showView(name) {
   $$('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
   $$('#tabbar [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
 
-  if (name === 'map') {
-    initMap();
-    renderMap();
-    setTimeout(() => map && map.invalidateSize(), 60);
-  }
   if (name === 'stats') renderStats();
   if (name === 'list') renderList();
-}
-
-/* ---------------- Map ---------------- */
-
-let map = null;
-let markerLayer = null;
-
-function initMap() {
-  if (map || typeof L === 'undefined') return;
-  map = L.map('map', { zoomControl: true, attributionControl: true })
-    .setView([34.5, 104], 4);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap',
-  }).addTo(map);
-  markerLayer = L.layerGroup().addTo(map);
-}
-
-function renderMap() {
-  const located = state.records.filter(r =>
-    r.lat != null && r.lng != null &&
-    Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lng))
-  );
-
-  if (!map) {
-    const empty = $('#map-empty');
-    empty.hidden = false;
-    if (located.length) {
-      empty.querySelector('h2').textContent = '地图需要联网';
-      empty.querySelector('p').textContent = '记录和坐标都在，联网后就能看到。';
-    } else {
-      empty.querySelector('h2').textContent = '还没有带位置的面';
-      empty.querySelector('p').textContent = '记录时点「用当前位置」，就能在地图上点亮它。';
-    }
-    return;
-  }
-
-  $('#map-empty').hidden = located.length > 0;
-  markerLayer.clearLayers();
-  if (!located.length) return;
-
-  const bounds = [];
-  located.forEach(r => {
-    const icon = L.divIcon({
-      className: 'pin-wrap',
-      html: '<div class="pin"></div>',
-      iconSize: [20, 20],
-      iconAnchor: [10, 20],
-      popupAnchor: [0, -18],
-    });
-    const pop = `
-      <div class="map-popup">
-        <div class="p-title">${escapeHtml(r.dish || r.shop)}</div>
-        <div class="p-meta">@${escapeHtml(r.shop)} · ${formatDate(r.date)}</div>
-        ${r.notes ? `<div class="p-note">${escapeHtml(r.notes)}</div>` : ''}
-      </div>`;
-    L.marker([Number(r.lat), Number(r.lng)], { icon }).addTo(markerLayer).bindPopup(pop);
-    bounds.push([Number(r.lat), Number(r.lng)]);
-  });
-  map.fitBounds(bounds, { padding: [48, 48], maxZoom: 13 });
 }
 
 /* ---------------- Stats ---------------- */
@@ -490,6 +424,15 @@ function renderStats() {
   const shopCount = {};
   records.forEach(r => { shopCount[r.shop] = (shopCount[r.shop] || 0) + 1; });
   const topShops = Object.entries(shopCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const cityCount = {};
+  records.forEach(r => {
+    const c = (r.city || '').trim();
+    if (c) cityCount[c] = (cityCount[c] || 0) + 1;
+  });
+  const cityRows = Object.entries(cityCount)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'));
+  const cityMax = Math.max(1, ...cityRows.map(c => c[1]));
 
   const tagCount = {};
   records.forEach(r => (r.tags || []).forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
@@ -559,6 +502,19 @@ function renderStats() {
           </div>`).join('')}
       </div>
     </div>
+
+    ${cityRows.length ? `
+    <div class="panel">
+      <h3>去过的城市 <span class="h3-note">${cityRows.length} 座</span></h3>
+      <div class="bars">
+        ${cityRows.map(([city, n]) => `
+          <div class="bar-row">
+            <span class="b-label">${escapeHtml(city)}</span>
+            <span class="b-track"><span class="b-fill" style="width:${Math.round(n / cityMax * 100)}%"></span></span>
+            <span class="b-val">${n}</span>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
 
     <div class="panel">
       <h3>最好吃的几碗 <span class="h3-note">平均 ${avg} 分</span></h3>
@@ -641,24 +597,9 @@ function renderPhoto() {
   }
 }
 
-function renderGeoHint() {
-  $('#geo-hint').hidden = !state.geo;
-}
-
-function renderGeoButton() {
-  const btn = $('#btn-geo');
-  btn.disabled = false;
-  btn.innerHTML = state.geo
-    ? '<svg><use href="#i-pin"/></svg>已定位'
-    : '<svg><use href="#i-pin"/></svg>定位';
-}
-
 function openForm(record) {
   state.editing = record || null;
   state.photo = record?.photo || null;
-  state.geo = (record && record.lat != null && record.lng != null)
-    ? { lat: Number(record.lat), lng: Number(record.lng) }
-    : null;
   state.rating = record ? (Number(record.rating) || 0) : 4;
   state.type = record?.type || '汤面';
   state.tags = Array.isArray(record?.tags) ? [...record.tags] : [];
@@ -680,8 +621,6 @@ function openForm(record) {
   renderTags();
   renderRatingPicker();
   renderPhoto();
-  renderGeoHint();
-  renderGeoButton();
 
   $('#form-sheet').hidden = false;
   $('#form-sheet .form-body').scrollTop = 0;
@@ -719,8 +658,9 @@ async function handleSave() {
     rating: state.rating,
     price: priceRaw === '' ? null : Number(priceRaw),
     city: $('#f-city').value.trim(),
-    lat: state.geo?.lat ?? null,
-    lng: state.geo?.lng ?? null,
+    // Keep coordinates from older records; the app no longer captures new ones.
+    lat: state.editing?.lat ?? null,
+    lng: state.editing?.lng ?? null,
     date: $('#f-date').value || todayStr(),
     notes: $('#f-notes').value.trim(),
     photo: state.photo,
@@ -778,145 +718,6 @@ async function compressPhoto(file, max = 1400, quality = 0.82) {
   canvas.height = Math.round(img.naturalHeight * scale);
   canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/jpeg', quality);
-}
-
-/* ---------------- Geo ---------------- */
-
-function captureGeo() {
-  const btn = $('#btn-geo');
-  if (!navigator.geolocation) { toast('这个浏览器不支持定位'); return; }
-  btn.disabled = true;
-  btn.textContent = '定位中…';
-
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      state.geo = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      renderGeoHint();
-      renderGeoButton();
-      toast('位置已记下');
-    },
-    err => {
-      console.warn(err);
-      renderGeoButton();
-      toast('定位失败：请在 HTTPS 下使用并允许定位');
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-  );
-}
-
-/* ---------------- Custom location ---------------- */
-
-let locMap = null;
-let locMarker = null;
-let locCoords = null;
-
-function locPinIcon() {
-  return L.divIcon({
-    className: 'pin-wrap',
-    html: '<div class="pin"></div>',
-    iconSize: [20, 20],
-    iconAnchor: [10, 20],
-  });
-}
-
-function initLocMap() {
-  locMap = L.map('loc-map', { zoomControl: true }).setView([34.5, 104], 4);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap',
-  }).addTo(locMap);
-  locMap.on('click', e => placeLocMarker(e.latlng.lat, e.latlng.lng));
-}
-
-function syncLocFields() {
-  if (!locCoords) return;
-  $('#loc-lat').value = Number(locCoords.lat).toFixed(6);
-  $('#loc-lng').value = Number(locCoords.lng).toFixed(6);
-}
-
-function updateLocReadout() {
-  $('#loc-readout').textContent = locCoords
-    ? `已选 ${Number(locCoords.lat).toFixed(6)}, ${Number(locCoords.lng).toFixed(6)}`
-    : '点地图选一个点，或直接填经纬度';
-}
-
-function placeLocMarker(lat, lng, syncFields = true) {
-  locCoords = { lat, lng };
-  if (!locMarker) {
-    locMarker = L.marker([lat, lng], { draggable: true, icon: locPinIcon() }).addTo(locMap);
-    locMarker.on('dragend', () => {
-      const p = locMarker.getLatLng();
-      locCoords = { lat: p.lat, lng: p.lng };
-      syncLocFields();
-      updateLocReadout();
-    });
-  } else {
-    locMarker.setLatLng([lat, lng]);
-  }
-  if (syncFields) syncLocFields();
-  updateLocReadout();
-}
-
-function readLocInputs() {
-  const lat = Number($('#loc-lat').value);
-  const lng = Number($('#loc-lng').value);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
-      Math.abs(lat) > 90 || Math.abs(lng) > 180 ||
-      $('#loc-lat').value === '' || $('#loc-lng').value === '') {
-    locCoords = null;
-    updateLocReadout();
-    return;
-  }
-  locCoords = { lat, lng };
-  if (locMap) {
-    if (locMarker) locMarker.setLatLng([lat, lng]);
-    else placeLocMarker(lat, lng, false);
-    locMap.setView([lat, lng], Math.max(locMap.getZoom(), 8));
-  }
-  updateLocReadout();
-}
-
-function openLocPicker() {
-  $('#loc-sheet').hidden = false;
-  locCoords = state.geo ? { lat: Number(state.geo.lat), lng: Number(state.geo.lng) } : null;
-  $('#loc-lat').value = locCoords ? Number(locCoords.lat).toFixed(6) : '';
-  $('#loc-lng').value = locCoords ? Number(locCoords.lng).toFixed(6) : '';
-  updateLocReadout();
-
-  if (typeof L === 'undefined') {
-    $('#loc-map').hidden = true;
-    $('#loc-map-hint').hidden = false;
-    return;
-  }
-
-  $('#loc-map').hidden = false;
-  $('#loc-map-hint').hidden = true;
-  if (!locMap) initLocMap();
-
-  setTimeout(() => {
-    locMap.invalidateSize();
-    if (locCoords) {
-      locMap.setView([locCoords.lat, locCoords.lng], 13);
-      placeLocMarker(locCoords.lat, locCoords.lng);
-    } else {
-      locMap.setView([34.5, 104], 4);
-      if (locMarker) { locMap.removeLayer(locMarker); locMarker = null; }
-    }
-  }, 80);
-}
-
-function closeLocPicker() {
-  $('#loc-sheet').hidden = true;
-  locCoords = null;
-}
-
-function confirmLoc() {
-  if (!locCoords) { toast('先在地图上点一个位置'); return; }
-  state.geo = { ...locCoords };
-  renderGeoHint();
-  renderGeoButton();
-  $('#loc-sheet').hidden = true;
-  toast('位置已记下');
 }
 
 /* ---------------- Annual poster ---------------- */
@@ -1281,7 +1082,7 @@ async function drawBowlCard(rec) {
     ctx.font = serif(32, '700');
     ctx.fillText(`¥${rec.price}`, M, metaY);
   }
-  const place = [rec.city, (rec.lat != null && rec.lng != null) ? '已定位' : ''].filter(Boolean).join(' · ');
+  const place = rec.city || '';
   if (place) {
     ctx.fillStyle = '#9a9083';
     ctx.font = sans(25);
@@ -1558,14 +1359,6 @@ function bindEvents() {
     renderPhoto();
   });
 
-  // Geo / custom location
-  $('#btn-geo').addEventListener('click', captureGeo);
-  $('#btn-pick-loc').addEventListener('click', openLocPicker);
-  $('#loc-cancel').addEventListener('click', closeLocPicker);
-  $('#loc-confirm').addEventListener('click', confirmLoc);
-  $('#loc-lat').addEventListener('input', readLocInputs);
-  $('#loc-lng').addEventListener('input', readLocInputs);
-
   // Poster
   $('#stats').addEventListener('click', e => {
     if (e.target.closest('#btn-poster')) openPoster();
@@ -1587,18 +1380,14 @@ function bindEvents() {
 
   // Back button closes the form
   window.addEventListener('popstate', () => {
-    if (!$('#loc-sheet').hidden) closeLocPicker();
     if (!$('#poster-sheet').hidden) $('#poster-sheet').hidden = true;
     if (formOpen) hideForm();
   });
 
-  // Refresh map when records change while on map
-
   // Keyboard escape
   window.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    if (!$('#loc-sheet').hidden) closeLocPicker();
-    else if (!$('#poster-sheet').hidden) $('#poster-sheet').hidden = true;
+    if (!$('#poster-sheet').hidden) $('#poster-sheet').hidden = true;
     else if (!$('#menu-sheet').hidden) closeMenu();
     else if (formOpen) closeForm();
   });
