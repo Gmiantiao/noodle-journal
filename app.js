@@ -2,11 +2,13 @@ import { allRecords, saveRecord, deleteRecord, clearRecords, importRecords } fro
 
 /* ---------------- Constants ---------------- */
 
-const TYPES = ['汤面', '拌面', '炒面', '米粉', '米线', '其他'];
+const DEFAULT_TYPES = ['汤面', '拌面', '炒面', '米粉', '米线', '其他'];
 const TYPE_EMOJI = {
   汤面: '🍜', 拌面: '🥢', 炒面: '🍝', 米粉: '🍲', 米线: '🍲', 其他: '🥣',
 };
 const RATING_LABELS = { 1: '踩雷', 2: '一般', 3: '还行', 4: '推荐', 5: '封神' };
+const TYPES_KEY = 'mianji:custom-types';
+const MAX_TAGS = 8;
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
@@ -15,7 +17,7 @@ const $$ = sel => Array.from(document.querySelectorAll(sel));
 
 const state = {
   records: [],
-  filter: '全部',
+  filter: { kind: 'all', value: '' },
   query: '',
   view: 'list',
   editing: null,
@@ -23,6 +25,7 @@ const state = {
   geo: null,
   rating: 4,
   type: '汤面',
+  tags: [],
 };
 
 /* ---------------- Helpers ---------------- */
@@ -71,11 +74,57 @@ function toast(msg, ms = 1900) {
   toast._t = setTimeout(() => { el.hidden = true; }, ms);
 }
 
+/* ---------------- Types & tags ---------------- */
+
+function customTypes() {
+  try {
+    const list = JSON.parse(localStorage.getItem(TYPES_KEY) || '[]');
+    return Array.isArray(list) ? list.filter(t => typeof t === 'string' && t) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function rememberType(name) {
+  const list = customTypes();
+  if (!list.includes(name)) {
+    list.push(name);
+    localStorage.setItem(TYPES_KEY, JSON.stringify(list));
+  }
+}
+
+function allTypes() {
+  const seen = new Set(DEFAULT_TYPES);
+  customTypes().forEach(t => seen.add(t));
+  state.records.forEach(r => { if (r.type) seen.add(r.type); });
+  // Defaults first, then everything else in insertion order.
+  return Array.from(seen);
+}
+
+function allTags() {
+  const counts = {};
+  state.records.forEach(r => (r.tags || []).forEach(t => {
+    counts[t] = (counts[t] || 0) + 1;
+  }));
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, count]) => ({ name, count }));
+}
+
+function cleanTag(name) {
+  return String(name || '').trim().replace(/^#+/, '').trim().slice(0, 16);
+}
+
 /* ---------------- Data ---------------- */
 
 async function loadRecords() {
   try {
-    state.records = await allRecords();
+    const rows = await allRecords();
+    // Migration: records created before tags existed have no tags array.
+    state.records = rows.map(r => ({
+      ...r,
+      tags: Array.isArray(r.tags) ? r.tags.filter(Boolean) : [],
+    }));
   } catch (err) {
     console.error(err);
     state.records = [];
@@ -93,11 +142,12 @@ function sortedRecords() {
 
 function filteredRecords() {
   let list = sortedRecords();
-  if (state.filter !== '全部') list = list.filter(r => r.type === state.filter);
+  if (state.filter.kind === 'type') list = list.filter(r => r.type === state.filter.value);
+  if (state.filter.kind === 'tag') list = list.filter(r => (r.tags || []).includes(state.filter.value));
   const q = state.query.trim().toLowerCase();
   if (q) {
     list = list.filter(r =>
-      [r.shop, r.dish, r.city, r.notes, r.type].join(' ').toLowerCase().includes(q)
+      [r.shop, r.dish, r.city, r.notes, r.type, ...(r.tags || [])].join(' ').toLowerCase().includes(q)
     );
   }
   return list;
@@ -107,10 +157,23 @@ function filteredRecords() {
 
 function renderFilterChips() {
   const wrap = $('#type-filter');
-  const all = ['全部', ...TYPES];
-  wrap.innerHTML = all.map(t =>
-    `<button class="chip ${t === state.filter ? 'active' : ''}" data-type="${t}">${t}</button>`
-  ).join('');
+  const chips = [
+    `<button class="chip ${state.filter.kind === 'all' ? 'active' : ''}" data-kind="all" data-value="">全部</button>`,
+  ];
+  allTypes().forEach(t => {
+    const on = state.filter.kind === 'type' && state.filter.value === t;
+    chips.push(`<button class="chip ${on ? 'active' : ''}" data-kind="type" data-value="${escapeHtml(t)}">${escapeHtml(t)}</button>`);
+  });
+  const shownTags = allTags().slice(0, 8);
+  // Keep an active tag visible even if it fell out of the top list.
+  if (state.filter.kind === 'tag' && !shownTags.some(t => t.name === state.filter.value)) {
+    shownTags.push({ name: state.filter.value, count: 0 });
+  }
+  shownTags.forEach(({ name }) => {
+    const on = state.filter.kind === 'tag' && state.filter.value === name;
+    chips.push(`<button class="chip ${on ? 'active' : ''}" data-kind="tag" data-value="${escapeHtml(name)}">#${escapeHtml(name)}</button>`);
+  });
+  wrap.innerHTML = chips.join('');
 }
 
 function renderList() {
@@ -156,6 +219,10 @@ function cardHtml(r) {
   meta.push(`<span>${formatDate(r.date)}</span>`);
   if (r.price != null && r.price !== '') meta.push(`<span class="sep">·</span><span>¥${escapeHtml(r.price)}</span>`);
 
+  const tags = r.tags || [];
+  const tagPills = tags.slice(0, 4).map(t => `<span class="tag-pill">#${escapeHtml(t)}</span>`).join('')
+    + (tags.length > 4 ? `<span class="tag-pill">+${tags.length - 4}</span>` : '');
+
   return `
     <article class="card" data-id="${escapeHtml(r.id)}">
       <div class="card-media${r.photo ? '' : ' no-photo'}"${mediaStyle}>${r.photo ? '' : emoji}</div>
@@ -168,6 +235,7 @@ function cardHtml(r) {
           ${bowlsHtml(Number(r.rating) || 0)}
         </div>
         <div class="card-meta">${meta.join('')}</div>
+        ${tagPills ? `<div class="card-tags">${tagPills}</div>` : ''}
         ${r.notes ? `<p class="card-note">${escapeHtml(r.notes)}</p>` : ''}
       </div>
     </article>`;
@@ -291,6 +359,11 @@ function renderStats() {
   records.forEach(r => { shopCount[r.shop] = (shopCount[r.shop] || 0) + 1; });
   const topShops = Object.entries(shopCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
+  const tagCount = {};
+  records.forEach(r => (r.tags || []).forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+  const tagRows = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const tagMax = Math.max(1, ...tagRows.map(t => t[1]));
+
   const topRated = records
     .filter(r => Number(r.rating) > 0)
     .slice()
@@ -305,6 +378,8 @@ function renderStats() {
       <div class="stat-tile"><div class="k">面条花费</div><div class="v">¥${spent}</div></div>
     </div>
 
+    <button class="poster-btn" id="btn-poster">生成 ${posterYear()} 年度海报</button>
+
     <div class="panel">
       <h3>吃什么面最多</h3>
       <div class="bars">
@@ -316,6 +391,19 @@ function renderStats() {
           </div>`).join('') || '<div class="stats-empty">还没填类型</div>'}
       </div>
     </div>
+
+    ${tagRows.length ? `
+    <div class="panel">
+      <h3>常用标签</h3>
+      <div class="bars">
+        ${tagRows.map(([tag, n]) => `
+          <div class="bar-row">
+            <span class="b-label">#${escapeHtml(tag)}</span>
+            <span class="b-track"><span class="b-fill" style="width:${Math.round(n / tagMax * 100)}%"></span></span>
+            <span class="b-val">${n}</span>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
 
     <div class="panel">
       <h3>最近一年</h3>
@@ -358,9 +446,44 @@ function renderStats() {
 let formOpen = false;
 
 function renderTypePicker() {
-  $('#type-picker').innerHTML = TYPES.map(t =>
-    `<button type="button" class="chip ${t === state.type ? 'active' : ''}" data-type="${t}">${t}</button>`
+  const chips = allTypes().map(t =>
+    `<button type="button" class="chip ${t === state.type ? 'active' : ''}" data-type="${escapeHtml(t)}">${escapeHtml(t)}</button>`
+  );
+  chips.push('<button type="button" class="chip add" data-add-type="1">＋ 自定义</button>');
+  $('#type-picker').innerHTML = chips.join('');
+}
+
+function renderTags() {
+  $('#tag-selected').innerHTML = state.tags.map(t =>
+    `<span class="tag-pill">#${escapeHtml(t)}<button type="button" data-remove-tag="${escapeHtml(t)}" aria-label="移除 ${escapeHtml(t)}">×</button></span>`
   ).join('');
+
+  const suggestions = allTags()
+    .filter(t => !state.tags.includes(t.name))
+    .slice(0, 12);
+  $('#tag-suggest').innerHTML = suggestions.map(t =>
+    `<button type="button" class="chip" data-suggest-tag="${escapeHtml(t.name)}">#${escapeHtml(t.name)}</button>`
+  ).join('');
+}
+
+function addTag(name) {
+  const tag = cleanTag(name);
+  if (!tag) return;
+  if (state.tags.includes(tag)) { toast('这个标签已经有了'); return; }
+  if (state.tags.length >= MAX_TAGS) { toast(`最多 ${MAX_TAGS} 个标签`); return; }
+  state.tags.push(tag);
+  renderTags();
+}
+
+function addCustomType() {
+  const input = $('#f-custom-type');
+  const name = cleanTag(input.value);
+  if (!name) { input.focus(); return; }
+  rememberType(name);
+  state.type = name;
+  input.value = '';
+  $('#custom-type-row').hidden = true;
+  renderTypePicker();
 }
 
 function renderRatingPicker() {
@@ -406,6 +529,7 @@ function openForm(record) {
     : null;
   state.rating = record ? (Number(record.rating) || 0) : 4;
   state.type = record?.type || '汤面';
+  state.tags = Array.isArray(record?.tags) ? [...record.tags] : [];
 
   $('#form-title').textContent = record ? '编辑这碗' : '记一碗';
   $('#form-delete').hidden = !record;
@@ -417,7 +541,11 @@ function openForm(record) {
   $('#f-city').value = record?.city || '';
   $('#f-notes').value = record?.notes || '';
 
+  $('#custom-type-row').hidden = true;
+  $('#f-custom-type').value = '';
+  $('#f-tag-input').value = '';
   renderTypePicker();
+  renderTags();
   renderRatingPicker();
   renderPhoto();
   renderGeoHint();
@@ -455,6 +583,7 @@ async function handleSave() {
     shop,
     dish: $('#f-dish').value.trim(),
     type: state.type,
+    tags: state.tags.slice(),
     rating: state.rating,
     price: priceRaw === '' ? null : Number(priceRaw),
     city: $('#f-city').value.trim(),
@@ -471,6 +600,7 @@ async function handleSave() {
   try {
     await saveRecord(rec);
     await loadRecords();
+    renderFilterChips();
     renderList();
     closeForm();
     toast(isEdit ? '已更新' : '已记下这一碗');
@@ -542,6 +672,341 @@ function captureGeo() {
   );
 }
 
+/* ---------------- Custom location ---------------- */
+
+let locMap = null;
+let locMarker = null;
+let locCoords = null;
+
+function locPinIcon() {
+  return L.divIcon({
+    className: 'pin-wrap',
+    html: '<div class="pin"></div>',
+    iconSize: [20, 20],
+    iconAnchor: [10, 20],
+  });
+}
+
+function initLocMap() {
+  locMap = L.map('loc-map', { zoomControl: true }).setView([34.5, 104], 4);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap',
+  }).addTo(locMap);
+  locMap.on('click', e => placeLocMarker(e.latlng.lat, e.latlng.lng));
+}
+
+function syncLocFields() {
+  if (!locCoords) return;
+  $('#loc-lat').value = Number(locCoords.lat).toFixed(6);
+  $('#loc-lng').value = Number(locCoords.lng).toFixed(6);
+}
+
+function updateLocReadout() {
+  $('#loc-readout').textContent = locCoords
+    ? `已选 ${Number(locCoords.lat).toFixed(6)}, ${Number(locCoords.lng).toFixed(6)}`
+    : '点地图选一个点，或直接填经纬度';
+}
+
+function placeLocMarker(lat, lng, syncFields = true) {
+  locCoords = { lat, lng };
+  if (!locMarker) {
+    locMarker = L.marker([lat, lng], { draggable: true, icon: locPinIcon() }).addTo(locMap);
+    locMarker.on('dragend', () => {
+      const p = locMarker.getLatLng();
+      locCoords = { lat: p.lat, lng: p.lng };
+      syncLocFields();
+      updateLocReadout();
+    });
+  } else {
+    locMarker.setLatLng([lat, lng]);
+  }
+  if (syncFields) syncLocFields();
+  updateLocReadout();
+}
+
+function readLocInputs() {
+  const lat = Number($('#loc-lat').value);
+  const lng = Number($('#loc-lng').value);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
+      Math.abs(lat) > 90 || Math.abs(lng) > 180 ||
+      $('#loc-lat').value === '' || $('#loc-lng').value === '') {
+    locCoords = null;
+    updateLocReadout();
+    return;
+  }
+  locCoords = { lat, lng };
+  if (locMap) {
+    if (locMarker) locMarker.setLatLng([lat, lng]);
+    else placeLocMarker(lat, lng, false);
+    locMap.setView([lat, lng], Math.max(locMap.getZoom(), 8));
+  }
+  updateLocReadout();
+}
+
+function openLocPicker() {
+  $('#loc-sheet').hidden = false;
+  locCoords = state.geo ? { lat: Number(state.geo.lat), lng: Number(state.geo.lng) } : null;
+  $('#loc-lat').value = locCoords ? Number(locCoords.lat).toFixed(6) : '';
+  $('#loc-lng').value = locCoords ? Number(locCoords.lng).toFixed(6) : '';
+  updateLocReadout();
+
+  if (typeof L === 'undefined') {
+    $('#loc-map').hidden = true;
+    $('#loc-map-hint').hidden = false;
+    return;
+  }
+
+  $('#loc-map').hidden = false;
+  $('#loc-map-hint').hidden = true;
+  if (!locMap) initLocMap();
+
+  setTimeout(() => {
+    locMap.invalidateSize();
+    if (locCoords) {
+      locMap.setView([locCoords.lat, locCoords.lng], 13);
+      placeLocMarker(locCoords.lat, locCoords.lng);
+    } else {
+      locMap.setView([34.5, 104], 4);
+      if (locMarker) { locMap.removeLayer(locMarker); locMarker = null; }
+    }
+  }, 80);
+}
+
+function closeLocPicker() {
+  $('#loc-sheet').hidden = true;
+  locCoords = null;
+}
+
+function confirmLoc() {
+  if (!locCoords) { toast('先在地图上点一个位置'); return; }
+  state.geo = { ...locCoords };
+  renderGeoHint();
+  renderGeoButton();
+  $('#loc-sheet').hidden = true;
+  toast('位置已记下');
+}
+
+/* ---------------- Annual poster ---------------- */
+
+let posterCanvas = null;
+let posterFileName = '';
+
+function posterYear() {
+  const years = state.records
+    .map(r => (r.date || '').slice(0, 4))
+    .filter(y => /^\d{4}$/.test(y));
+  if (!years.length) return String(new Date().getFullYear());
+  years.sort();
+  return years[years.length - 1];
+}
+
+function fitText(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let t = String(text);
+  while (t.length && ctx.measureText(t + '…').width > maxWidth) t = t.slice(0, -1);
+  return t + '…';
+}
+
+function drawPoster(year, recs) {
+  const W = 1080, H = 1440, M = 84;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const font = (size, weight = '400') =>
+    `${weight} ${size}px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif`;
+
+  // background
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#fbf7f2');
+  bg.addColorStop(1, '#f1e8dd');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // watermark
+  ctx.fillStyle = 'rgba(217,79,61,.055)';
+  ctx.font = font(380, '700');
+  ctx.textAlign = 'right';
+  ctx.fillText('面', W - 40, 420);
+  ctx.textAlign = 'left';
+
+  // header
+  ctx.fillStyle = '#d94f3d';
+  ctx.font = font(26, '600');
+  ctx.fillText('面迹 · NOODLE JOURNAL', M, 104);
+
+  ctx.fillStyle = '#2b2622';
+  ctx.font = font(150, '700');
+  ctx.fillText(year, M - 4, 268);
+
+  ctx.fillStyle = '#6f665e';
+  ctx.font = font(44);
+  ctx.fillText('我的吃面年报', M, 332);
+
+  ctx.fillStyle = '#d94f3d';
+  ctx.fillRect(M, 366, 120, 6);
+
+  // headline stats
+  const shops = new Set(recs.map(r => r.shop)).size;
+  const cities = new Set(recs.map(r => r.city).filter(Boolean)).size;
+  const spent = recs.reduce((s, r) => s + (Number(r.price) || 0), 0);
+  const stats = [
+    ['吃过的面', `${recs.length}`, '碗'],
+    ['去过的店', `${shops}`, '家'],
+    ['走过的城市', `${cities}`, '座'],
+    ['面条花费', `¥${spent}`, ''],
+  ];
+  const colW = (W - 2 * M) / 4;
+  stats.forEach(([label, value, unit], i) => {
+    const x = M + i * colW;
+    ctx.fillStyle = '#2b2622';
+    ctx.font = font(58, '700');
+    ctx.fillText(value, x, 488);
+    const vw = ctx.measureText(value).width;
+    if (unit) {
+      ctx.fillStyle = '#a39a91';
+      ctx.font = font(24);
+      ctx.fillText(unit, x + vw + 6, 488);
+    }
+    ctx.fillStyle = '#a39a91';
+    ctx.font = font(23);
+    ctx.fillText(label, x, 528);
+  });
+
+  // section helper
+  const section = (title, y) => {
+    ctx.fillStyle = '#d94f3d';
+    ctx.font = font(25, '600');
+    ctx.fillText(title, M, y);
+    ctx.strokeStyle = '#e4d8cb';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(M, y + 24);
+    ctx.lineTo(W - M, y + 24);
+    ctx.stroke();
+  };
+
+  // top shops
+  const shopCount = {};
+  recs.forEach(r => { shopCount[r.shop] = (shopCount[r.shop] || 0) + 1; });
+  const topShops = Object.entries(shopCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  section('最常去的店', 612);
+  topShops.forEach(([shop, n], i) => {
+    const y = 676 + i * 54;
+    ctx.fillStyle = '#b8ada2';
+    ctx.font = font(23, '600');
+    ctx.fillText(String(i + 1).padStart(2, '0'), M, y);
+    ctx.fillStyle = '#2b2622';
+    ctx.font = font(32, '600');
+    ctx.fillText(fitText(ctx, shop, 600), M + 56, y);
+    ctx.fillStyle = '#a39a91';
+    ctx.font = font(23);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${n} 碗`, W - M, y);
+    ctx.textAlign = 'left';
+  });
+
+  // top types
+  const typeCount = {};
+  recs.forEach(r => { typeCount[r.type] = (typeCount[r.type] || 0) + 1; });
+  const topTypes = Object.entries(typeCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  section('最爱的面型', 874);
+  topTypes.forEach(([type, n], i) => {
+    const y = 936 + i * 50;
+    ctx.fillStyle = '#2b2622';
+    ctx.font = font(30, '600');
+    ctx.fillText(fitText(ctx, type, 620), M, y);
+    ctx.fillStyle = '#a39a91';
+    ctx.font = font(23);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${n} 碗`, W - M, y);
+    ctx.textAlign = 'left';
+  });
+
+  // top tags
+  const tagCount = {};
+  recs.forEach(r => (r.tags || []).forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+  const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([t]) => `#${t}`);
+
+  section('常用标签', 1104);
+  ctx.fillStyle = '#6f665e';
+  ctx.font = font(27);
+  ctx.fillText(fitText(ctx, topTags.join('   ') || '还没有标签', W - 2 * M), M, 1152);
+
+  // best bowl
+  const best = recs
+    .filter(r => Number(r.rating) > 0)
+    .slice()
+    .sort((a, b) => Number(b.rating) - Number(a.rating) || (b.date || '').localeCompare(a.date || ''))[0];
+
+  section('年度最佳一碗', 1216);
+  if (best) {
+    ctx.fillStyle = '#2b2622';
+    ctx.font = font(40, '700');
+    ctx.fillText(fitText(ctx, best.dish || best.type, 700), M, 1286);
+    ctx.fillStyle = '#6f665e';
+    ctx.font = font(25);
+    ctx.fillText(fitText(ctx, `@${best.shop} · 评分 ${best.rating}/5`, 700), M, 1326);
+  } else {
+    ctx.fillStyle = '#a39a91';
+    ctx.font = font(26);
+    ctx.fillText('还没有评分', M, 1286);
+  }
+
+  // footer
+  ctx.fillStyle = '#d94f3d';
+  ctx.fillRect(M, 1372, 52, 3);
+  ctx.fillStyle = '#a39a91';
+  ctx.font = font(23);
+  ctx.fillText('一碗好面，一段路。', M, 1412);
+  ctx.textAlign = 'right';
+  ctx.fillText('面迹 · 一碗面的手帐', W - M, 1412);
+  ctx.textAlign = 'left';
+
+  return canvas;
+}
+
+function openPoster() {
+  const year = posterYear();
+  const recs = state.records.filter(r => (r.date || '').startsWith(year));
+  if (!recs.length) { toast('还没有可生成海报的记录'); return; }
+
+  posterCanvas = drawPoster(year, recs);
+  posterFileName = `面迹-${year}-年度海报.png`;
+  $('#poster-img').src = posterCanvas.toDataURL('image/png');
+  $('#poster-sheet').hidden = false;
+}
+
+async function sharePoster() {
+  if (!posterCanvas) return;
+  const blob = await new Promise(resolve => posterCanvas.toBlob(resolve, 'image/png'));
+  if (!blob) { toast('海报生成失败'); return; }
+
+  const file = new File([blob], posterFileName, { type: 'image/png' });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: '面迹年度海报' });
+      return;
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    console.warn(err);
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = posterFileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  toast('海报已保存');
+}
+
 /* ---------------- Menu / backup ---------------- */
 
 function openMenu() {
@@ -602,7 +1067,10 @@ async function importBackup(file) {
         id: r.id || uuid(),
         shop: String(r.shop),
         dish: String(r.dish || ''),
-        type: TYPES.includes(r.type) ? r.type : '其他',
+        type: String(r.type || '其他').slice(0, 16),
+        tags: Array.isArray(r.tags)
+          ? r.tags.map(t => cleanTag(t)).filter(Boolean).slice(0, MAX_TAGS)
+          : [],
         rating: Math.min(5, Math.max(0, Number(r.rating) || 0)),
         price: r.price == null || r.price === '' ? null : Number(r.price),
         city: String(r.city || ''),
@@ -617,6 +1085,7 @@ async function importBackup(file) {
 
     const added = await importRecords(clean);
     await loadRecords();
+    renderFilterChips();
     renderList();
     closeMenu();
     toast(`导入 ${added} 条记录`);
@@ -631,6 +1100,7 @@ async function clearAll() {
   try {
     await clearRecords();
     await loadRecords();
+    renderFilterChips();
     renderList();
     renderStats();
     closeMenu();
@@ -659,24 +1129,59 @@ function bindEvents() {
     renderList();
   });
   $('#type-filter').addEventListener('click', e => {
-    const chip = e.target.closest('[data-type]');
+    const chip = e.target.closest('[data-kind]');
     if (!chip) return;
-    state.filter = chip.dataset.type;
+    state.filter = { kind: chip.dataset.kind, value: chip.dataset.value || '' };
     renderFilterChips();
     renderList();
   });
 
   // Form header
+  $('#record-form').addEventListener('submit', e => e.preventDefault());
   $('#form-cancel').addEventListener('click', closeForm);
   $('#form-save').addEventListener('click', handleSave);
   $('#form-delete').addEventListener('click', handleDelete);
 
   // Type & rating pickers
   $('#type-picker').addEventListener('click', e => {
+    if (e.target.closest('[data-add-type]')) {
+      const row = $('#custom-type-row');
+      row.hidden = false;
+      $('#f-custom-type').focus();
+      return;
+    }
     const chip = e.target.closest('[data-type]');
     if (!chip) return;
     state.type = chip.dataset.type;
     renderTypePicker();
+  });
+  $('#btn-custom-type').addEventListener('click', addCustomType);
+  $('#f-custom-type').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addCustomType(); }
+  });
+
+  // Tags
+  $('#btn-add-tag').addEventListener('click', () => {
+    addTag($('#f-tag-input').value);
+    $('#f-tag-input').value = '';
+  });
+  $('#f-tag-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTag(e.target.value);
+      e.target.value = '';
+    }
+  });
+  $('#tag-selected').addEventListener('click', e => {
+    const btn = e.target.closest('[data-remove-tag]');
+    if (!btn) return;
+    state.tags = state.tags.filter(t => t !== btn.dataset.removeTag);
+    renderTags();
+  });
+  $('#tag-suggest').addEventListener('click', e => {
+    const chip = e.target.closest('[data-suggest-tag]');
+    if (!chip) return;
+    addTag(chip.dataset.suggestTag);
   });
   $('#rating-picker').addEventListener('click', e => {
     const btn = e.target.closest('[data-rating]');
@@ -704,8 +1209,20 @@ function bindEvents() {
     renderPhoto();
   });
 
-  // Geo
+  // Geo / custom location
   $('#btn-geo').addEventListener('click', captureGeo);
+  $('#btn-pick-loc').addEventListener('click', openLocPicker);
+  $('#loc-cancel').addEventListener('click', closeLocPicker);
+  $('#loc-confirm').addEventListener('click', confirmLoc);
+  $('#loc-lat').addEventListener('input', readLocInputs);
+  $('#loc-lng').addEventListener('input', readLocInputs);
+
+  // Poster
+  $('#stats').addEventListener('click', e => {
+    if (e.target.closest('#btn-poster')) openPoster();
+  });
+  $('#poster-close').addEventListener('click', () => { $('#poster-sheet').hidden = true; });
+  $('#poster-share').addEventListener('click', sharePoster);
 
   // Menu
   $('#btn-menu').addEventListener('click', openMenu);
@@ -721,6 +1238,8 @@ function bindEvents() {
 
   // Back button closes the form
   window.addEventListener('popstate', () => {
+    if (!$('#loc-sheet').hidden) closeLocPicker();
+    if (!$('#poster-sheet').hidden) $('#poster-sheet').hidden = true;
     if (formOpen) hideForm();
   });
 
@@ -728,10 +1247,11 @@ function bindEvents() {
 
   // Keyboard escape
   window.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      if (!$('#menu-sheet').hidden) closeMenu();
-      else if (formOpen) closeForm();
-    }
+    if (e.key !== 'Escape') return;
+    if (!$('#loc-sheet').hidden) closeLocPicker();
+    else if (!$('#poster-sheet').hidden) $('#poster-sheet').hidden = true;
+    else if (!$('#menu-sheet').hidden) closeMenu();
+    else if (formOpen) closeForm();
   });
 }
 
@@ -743,6 +1263,8 @@ async function init() {
   renderRatingPicker();
   bindEvents();
   await loadRecords();
+  renderFilterChips();
+  renderTypePicker();
   renderList();
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

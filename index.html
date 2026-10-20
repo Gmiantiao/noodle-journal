@@ -158,6 +158,20 @@
     <div class="field">
       <label>类型</label>
       <div class="chips" id="type-picker"></div>
+      <div class="custom-type-row" id="custom-type-row" hidden>
+        <input id="f-custom-type" type="text" maxlength="12" placeholder="新的分类，如：米皮、冷面">
+        <button type="button" class="mini-btn" id="btn-custom-type">添加</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="f-tag-input">标签 <em>菜系、地域、印象</em></label>
+      <div class="tag-selected" id="tag-selected"></div>
+      <div class="input-with-btn">
+        <input id="f-tag-input" type="text" maxlength="16" placeholder="例：兰州、清真、苍蝇馆子">
+        <button type="button" class="mini-btn" id="btn-add-tag">添加</button>
+      </div>
+      <div class="tag-suggest" id="tag-suggest"></div>
     </div>
 
     <div class="field">
@@ -178,10 +192,13 @@
 
     <div class="field">
       <label for="f-city">城市 / 地点</label>
-      <div class="input-with-btn">
+      <div class="input-with-btn loc-buttons">
         <input id="f-city" type="text" placeholder="例：温州苍南">
         <button type="button" class="mini-btn" id="btn-geo">
           <svg><use href="#i-pin"/></svg>定位
+        </button>
+        <button type="button" class="mini-btn" id="btn-pick-loc">
+          <svg><use href="#i-map"/></svg>选位置
         </button>
       </div>
       <p class="hint" id="geo-hint" hidden>已记下坐标，地图上会点亮</p>
@@ -196,6 +213,44 @@
       <svg><use href="#i-trash"/></svg>删除这碗
     </button>
   </form>
+</section>
+
+<!-- ===================== Location picker ===================== -->
+<section class="sheet loc-sheet" id="loc-sheet" hidden>
+  <header class="sheet-head">
+    <button class="text-btn" id="loc-cancel">取消</button>
+    <h2>选位置</h2>
+    <button class="text-btn strong" id="loc-confirm">确定</button>
+  </header>
+  <div class="loc-wrap">
+    <div id="loc-map"></div>
+    <div class="loc-panel">
+      <p class="loc-readout" id="loc-readout">点地图选一个点，或直接填经纬度</p>
+      <div class="field-row">
+        <div class="field">
+          <label for="loc-lat">纬度</label>
+          <input id="loc-lat" type="number" step="0.000001" inputmode="decimal" placeholder="30.2741">
+        </div>
+        <div class="field">
+          <label for="loc-lng">经度</label>
+          <input id="loc-lng" type="number" step="0.000001" inputmode="decimal" placeholder="120.1551">
+        </div>
+      </div>
+      <p class="hint" id="loc-map-hint" hidden>地图需要联网；离线时可以手动填经纬度</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Poster sheet ===================== -->
+<section class="sheet poster-sheet" id="poster-sheet" hidden>
+  <header class="sheet-head">
+    <button class="text-btn" id="poster-close">关闭</button>
+    <h2>年度海报</h2>
+    <button class="text-btn strong" id="poster-share">分享</button>
+  </header>
+  <div class="poster-body">
+    <img id="poster-img" alt="年度海报">
+  </div>
 </section>
 
 <!-- ===================== Menu sheet ===================== -->
