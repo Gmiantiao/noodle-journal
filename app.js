@@ -347,7 +347,6 @@ function renderStats() {
       <div class="stat-tile"><div class="k">面条花费</div><div class="v">¥${spent}</div></div>
     </div>
 
-    <button class="poster-btn" id="btn-poster">生成 ${posterYear()} 年度海报</button>
 
     <div class="panel">
       <h3>吃什么面最多</h3>
@@ -732,185 +731,16 @@ async function compressPhoto(file, max = 1400, quality = 0.82) {
   return canvas.toDataURL('image/jpeg', quality);
 }
 
-/* ---------------- Annual poster ---------------- */
+/* ---------------- Share image ---------------- */
 
 let posterCanvas = null;
 let posterFileName = '';
-
-function posterYear() {
-  const years = state.records
-    .map(r => (r.date || '').slice(0, 4))
-    .filter(y => /^\d{4}$/.test(y));
-  if (!years.length) return String(new Date().getFullYear());
-  years.sort();
-  return years[years.length - 1];
-}
 
 function fitText(ctx, text, maxWidth) {
   if (ctx.measureText(text).width <= maxWidth) return text;
   let t = String(text);
   while (t.length && ctx.measureText(t + '…').width > maxWidth) t = t.slice(0, -1);
   return t + '…';
-}
-
-function drawPoster(year, recs) {
-  const W = 1080, H = 1440, M = 84;
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d');
-  const sans = (size, weight = '400') =>
-    `${weight} ${size}px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif`;
-
-  // background
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#ffffff');
-  bg.addColorStop(1, '#f7f7f8');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
-
-  // watermark
-  ctx.fillStyle = 'rgba(226,59,46,.04)';
-  ctx.font = sans(380, '700');
-  ctx.textAlign = 'right';
-  ctx.fillText('面', W - 40, 420);
-  ctx.textAlign = 'left';
-
-  // header
-  ctx.fillStyle = '#e23b2e';
-  ctx.font = sans(26, '600');
-  ctx.fillText('面迹 · NOODLE JOURNAL', M, 104);
-
-  ctx.fillStyle = '#141416';
-  ctx.font = sans(150, '700');
-  ctx.fillText(year, M - 4, 268);
-
-  ctx.fillStyle = '#5e5e64';
-  ctx.font = sans(42, '600');
-  ctx.fillText('我的吃面年报', M, 332);
-
-  ctx.fillStyle = '#e23b2e';
-  ctx.fillRect(M, 366, 120, 6);
-
-  // headline stats
-  const shops = new Set(recs.map(r => r.shop)).size;
-  const cities = new Set(recs.map(r => r.city).filter(Boolean)).size;
-  const spent = recs.reduce((s, r) => s + (Number(r.price) || 0), 0);
-  const stats = [
-    ['吃过的面', `${recs.length}`, '碗'],
-    ['去过的店', `${shops}`, '家'],
-    ['走过的城市', `${cities}`, '座'],
-    ['面条花费', `¥${spent}`, ''],
-  ];
-  const colW = (W - 2 * M) / 4;
-  stats.forEach(([label, value, unit], i) => {
-    const x = M + i * colW;
-    ctx.fillStyle = '#141416';
-    ctx.font = sans(58, '700');
-    ctx.fillText(value, x, 488);
-    const vw = ctx.measureText(value).width;
-    if (unit) {
-      ctx.fillStyle = '#9a9aa1';
-      ctx.font = sans(24);
-      ctx.fillText(unit, x + vw + 6, 488);
-    }
-    ctx.fillStyle = '#9a9aa1';
-    ctx.font = sans(23);
-    ctx.fillText(label, x, 528);
-  });
-
-  // section helper
-  const section = (title, y) => {
-    ctx.fillStyle = '#e23b2e';
-    ctx.font = sans(25, '600');
-    ctx.fillText(title, M, y);
-    ctx.strokeStyle = '#ededf0';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(M, y + 24);
-    ctx.lineTo(W - M, y + 24);
-    ctx.stroke();
-  };
-
-  // top shops
-  const shopCount = {};
-  recs.forEach(r => { shopCount[r.shop] = (shopCount[r.shop] || 0) + 1; });
-  const topShops = Object.entries(shopCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
-
-  section('最常去的店', 612);
-  topShops.forEach(([shop, n], i) => {
-    const y = 676 + i * 54;
-    ctx.fillStyle = '#b9b9bf';
-    ctx.font = sans(23, '600');
-    ctx.fillText(String(i + 1).padStart(2, '0'), M, y);
-    ctx.fillStyle = '#141416';
-    ctx.font = sans(32, '600');
-    ctx.fillText(fitText(ctx, shop, 600), M + 56, y);
-    ctx.fillStyle = '#9a9aa1';
-    ctx.font = sans(23);
-    ctx.textAlign = 'right';
-    ctx.fillText(`${n} 碗`, W - M, y);
-    ctx.textAlign = 'left';
-  });
-
-  // top types
-  const typeCount = {};
-  recs.forEach(r => { typeCount[r.type] = (typeCount[r.type] || 0) + 1; });
-  const topTypes = Object.entries(typeCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
-
-  section('最爱的面型', 874);
-  topTypes.forEach(([type, n], i) => {
-    const y = 936 + i * 50;
-    ctx.fillStyle = '#141416';
-    ctx.font = sans(30, '600');
-    ctx.fillText(fitText(ctx, type, 620), M, y);
-    ctx.fillStyle = '#9a9aa1';
-    ctx.font = sans(23);
-    ctx.textAlign = 'right';
-    ctx.fillText(`${n} 碗`, W - M, y);
-    ctx.textAlign = 'left';
-  });
-
-  // top tags
-  const tagCount = {};
-  recs.forEach(r => (r.tags || []).forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
-  const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([t]) => `#${t}`);
-
-  section('常用标签', 1104);
-  ctx.fillStyle = '#5e5e64';
-  ctx.font = sans(27);
-  ctx.fillText(fitText(ctx, topTags.join('   ') || '还没有标签', W - 2 * M), M, 1152);
-
-  // best bowl
-  const best = recs
-    .filter(r => Number(r.rating) > 0)
-    .slice()
-    .sort((a, b) => Number(b.rating) - Number(a.rating) || (b.date || '').localeCompare(a.date || ''))[0];
-
-  section('年度最佳一碗', 1216);
-  if (best) {
-    ctx.fillStyle = '#141416';
-    ctx.font = sans(40, '700');
-    ctx.fillText(fitText(ctx, best.dish || best.type, 700), M, 1286);
-    ctx.fillStyle = '#5e5e64';
-    ctx.font = sans(25);
-    ctx.fillText(fitText(ctx, `@${best.shop} · 评分 ${best.rating}/5`, 700), M, 1326);
-  } else {
-    ctx.fillStyle = '#9a9aa1';
-    ctx.font = sans(26);
-    ctx.fillText('还没有评分', M, 1286);
-  }
-
-  // footer
-  ctx.fillStyle = '#e23b2e';
-  ctx.fillRect(M, 1372, 52, 3);
-  ctx.fillStyle = '#9a9aa1';
-  ctx.font = sans(23);
-  ctx.textAlign = 'right';
-  ctx.fillText('面迹 · 面条宇宙正在生成中', W - M, 1412);
-  ctx.textAlign = 'left';
-
-  return canvas;
 }
 
 /* ---------------- Single bowl card ---------------- */
@@ -1124,27 +954,16 @@ async function openBowlCard(rec) {
   }
 }
 
-function openPoster() {
-  const year = posterYear();
-  const recs = state.records.filter(r => (r.date || '').startsWith(year));
-  if (!recs.length) { toast('还没有可生成海报的记录'); return; }
-
-  posterCanvas = drawPoster(year, recs);
-  posterFileName = `面迹-${year}-年度海报.png`;
-  $('#poster-sheet .sheet-head h2').textContent = '年度海报';
-  $('#poster-img').src = posterCanvas.toDataURL('image/png');
-  $('#poster-sheet').hidden = false;
-}
 
 async function sharePoster() {
   if (!posterCanvas) return;
   const blob = await new Promise(resolve => posterCanvas.toBlob(resolve, 'image/png'));
-  if (!blob) { toast('海报生成失败'); return; }
+  if (!blob) { toast('分享图生成失败'); return; }
 
   const file = new File([blob], posterFileName, { type: 'image/png' });
   try {
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: '面迹年度海报' });
+      await navigator.share({ files: [file], title: '面迹分享' });
       return;
     }
   } catch (err) {
@@ -1160,7 +979,7 @@ async function sharePoster() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
-  toast('海报已保存');
+  toast('分享图已保存');
 }
 
 /* ---------------- Menu / backup ---------------- */
@@ -1381,10 +1200,7 @@ function bindEvents() {
     renderPhoto();
   });
 
-  // Poster
-  $('#stats').addEventListener('click', e => {
-    if (e.target.closest('#btn-poster')) openPoster();
-  });
+  // Share image
   $('#poster-close').addEventListener('click', () => { $('#poster-sheet').hidden = true; });
   $('#poster-share').addEventListener('click', sharePoster);
 

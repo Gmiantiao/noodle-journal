@@ -75,6 +75,7 @@ svg use, svg path, svg circle, svg line, svg rect {
   stroke-linejoin: round;
 }
 svg .dot { fill: currentColor; stroke: none; }
+svg .fill { fill: currentColor; stroke: none; }
 
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 input, textarea { font: inherit; color: inherit; }
@@ -606,18 +607,6 @@ input, textarea { font: inherit; color: inherit; }
 .danger-link:active { color: var(--red); }
 
 /* ---------------- Poster ---------------- */
-
-.poster-btn {
-  width: 100%;
-  margin: 0 0 16px;
-  padding: 14px;
-  border-radius: 14px;
-  background: var(--red-btn);
-  color: var(--on-red);
-  font-size: 14px;
-  font-weight: 700;
-}
-.poster-btn:active { opacity: .85; }
 
 .poster-body {
   flex: 1;
