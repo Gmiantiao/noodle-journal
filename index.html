@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f2ece1" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1a1714" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0e0f" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="面迹">
-<title>面迹 · 一碗面的手帐</title>
+<title>面迹 · 面条宇宙正在生成中</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png">
@@ -59,7 +59,7 @@
   <div class="brand">
     <div>
       <h1>面迹</h1>
-      <p>一碗面的手帐</p>
+      <p>面条宇宙正在生成中</p>
     </div>
   </div>
   <button class="icon-btn" id="btn-menu" aria-label="更多">
@@ -199,6 +199,16 @@
       <svg><use href="#i-trash"/></svg>删除这碗
     </button>
   </form>
+</section>
+
+<!-- ===================== Detail sheet ===================== -->
+<section class="sheet detail-sheet" id="detail-sheet" hidden>
+  <header class="sheet-head">
+    <button class="text-btn" id="detail-close">返回</button>
+    <h2>这一碗</h2>
+    <button class="text-btn" id="detail-edit">编辑</button>
+  </header>
+  <div class="detail-body" id="detail-body"></div>
 </section>
 
 <!-- ===================== Poster sheet ===================== -->

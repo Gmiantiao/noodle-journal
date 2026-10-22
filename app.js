@@ -21,6 +21,7 @@ const state = {
   query: '',
   view: 'list',
   editing: null,
+  detailId: null,
   photo: null,
   rating: 4,
   type: '汤面',
@@ -175,17 +176,6 @@ function renderFilterChips() {
   wrap.innerHTML = chips.join('');
 }
 
-const CN_DIGITS = '〇一二三四五六七八九';
-const CN_MONTHS = ['', '一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
-
-function cnYear(year) {
-  return String(year).split('').map(d => CN_DIGITS[Number(d)] ?? d).join('') + '年';
-}
-
-function cnMonth(month) {
-  return CN_MONTHS[Number(month)] || `${Number(month)}月`;
-}
-
 function entryDate(dateStr) {
   if (!dateStr) return { md: '——', wd: '' };
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -227,7 +217,7 @@ function renderList() {
     const [y, m] = key.split('-');
     const title = key === '0000-00'
       ? '未记日期'
-      : `${cnYear(y)} <span>${cnMonth(m)}</span>`;
+      : `${y}年 <span>${Number(m)}月</span>`;
     return `
       <section class="month">
         <h2 class="month-title">${title}</h2>
@@ -243,18 +233,11 @@ function renderList() {
   $('#list-summary').textContent = parts.join(' · ');
 
   cards.querySelectorAll('.entry').forEach(el => {
-    el.addEventListener('click', e => {
+    el.addEventListener('click', () => {
       const rec = state.records.find(r => r.id === el.dataset.id);
-      if (!rec) return;
-      if (e.target.closest('[data-share]')) {
-        openBowlCard(rec);
-        return;
-      }
-      openForm(rec);
+      if (rec) openDetail(rec);
     });
   });
-
-  requestAnimationFrame(drawNoodleStrand);
 }
 
 function entryHtml(r) {
@@ -264,7 +247,8 @@ function entryHtml(r) {
   if (r.city) meta.push(`<span>${escapeHtml(r.city)}</span>`);
   if (r.price != null && r.price !== '') meta.push(`<span>¥${escapeHtml(r.price)}</span>`);
 
-  const tagLine = (r.tags || []).slice(0, 5).map(t => `#${escapeHtml(t)}`).join('  ');
+  const tagLine = (r.tags || []).slice(0, 5)
+    .map(t => `<span class="entry-tag">#${escapeHtml(t)}</span>`).join('');
   const mediaStyle = r.photo ? ` style="background-image:url('${r.photo}')"` : '';
   const emoji = TYPE_EMOJI[r.type] || '🍜';
 
@@ -272,9 +256,6 @@ function entryHtml(r) {
     <article class="entry" data-id="${escapeHtml(r.id)}">
       <div class="entry-media${r.photo ? '' : ' no-photo'}"${mediaStyle}>
         ${r.photo ? '' : `<span class="entry-emoji">${emoji}</span>`}
-        <button class="entry-share" data-share="${escapeHtml(r.id)}" aria-label="分享这碗">
-          <svg><use href="#i-share"/></svg>
-        </button>
       </div>
       <div class="entry-body">
         <div class="entry-top">
@@ -291,93 +272,13 @@ function entryHtml(r) {
     </article>`;
 }
 
-/* ---------------- Noodle strand ---------------- */
-
-function drawNoodleStrand() {
-  const cards = $('#cards');
-  if (!cards) return;
-  cards.querySelectorAll('.noodle-strand').forEach(el => el.remove());
-
-  const entries = Array.from(cards.querySelectorAll('.entry'));
-  const months = Array.from(cards.querySelectorAll('.month-title'));
-  if (!entries.length) return;
-
-  const cardsRect = cards.getBoundingClientRect();
-  if (cardsRect.height < 10) return;
-
-  const nodes = [];
-  entries.forEach(el => {
-    const r = el.getBoundingClientRect();
-    nodes.push({
-      y: r.top - cardsRect.top + 26,
-      kind: el.querySelector('.entry-media:not(.no-photo)') ? 'drop' : 'ring',
-    });
-  });
-  months.forEach(el => {
-    const r = el.getBoundingClientRect();
-    nodes.push({ y: r.top - cardsRect.top + 18, kind: 'month' });
-  });
-  nodes.sort((a, b) => a.y - b.y);
-
-  const height = Math.max(120, Math.max(...nodes.map(n => n.y)) + 64);
-  const NS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('class', 'noodle-strand');
-  svg.setAttribute('width', '60');
-  svg.setAttribute('height', String(height));
-  svg.setAttribute('viewBox', `0 0 60 ${height}`);
-  svg.setAttribute('aria-hidden', 'true');
-
-  const X = 26;
-  const xAt = y => X
-    + 5.5 * Math.sin(y / 118 * Math.PI * 2 + 0.8)
-    + 2.2 * Math.sin(y / 47 * Math.PI * 2 + 2.1);
-
-  let d = '';
-  for (let y = 0; y <= height; y += 5) {
-    d += `${y === 0 ? 'M' : 'L'}${xAt(y).toFixed(2)} ${y} `;
-  }
-  const path = document.createElementNS(NS, 'path');
-  path.setAttribute('d', d.trim());
-  path.setAttribute('class', 'strand');
-  svg.appendChild(path);
-
-  nodes.forEach(node => {
-    const x = xAt(node.y);
-
-    const link = document.createElementNS(NS, 'path');
-    link.setAttribute('d',
-      `M ${x.toFixed(2)} ${node.y} C ${(x + 10).toFixed(2)} ${node.y - 3}, 46 ${node.y + 3}, 58 ${node.y}`);
-    link.setAttribute('class', node.kind === 'month' ? 'strand-link month' : 'strand-link');
-    svg.appendChild(link);
-
-    if (node.kind === 'month') {
-      const rect = document.createElementNS(NS, 'rect');
-      rect.setAttribute('x', String(x - 3.5));
-      rect.setAttribute('y', String(node.y - 3.5));
-      rect.setAttribute('width', '7');
-      rect.setAttribute('height', '7');
-      rect.setAttribute('class', 'strand-month');
-      svg.appendChild(rect);
-    } else {
-      const dot = document.createElementNS(NS, 'circle');
-      dot.setAttribute('cx', x.toFixed(2));
-      dot.setAttribute('cy', String(node.y));
-      dot.setAttribute('r', '3.2');
-      dot.setAttribute('class', node.kind === 'drop' ? 'strand-drop' : 'strand-ring');
-      svg.appendChild(dot);
-    }
-  });
-
-  cards.prepend(svg);
-}
-
 /* ---------------- Views ---------------- */
 
 function showView(name) {
   state.view = name;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
   $$('#tabbar [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  $('#btn-add').hidden = name !== 'list';
 
   if (name === 'stats') renderStats();
   if (name === 'city') renderCities();
@@ -478,7 +379,7 @@ function renderStats() {
       <div class="month-chart">
         ${months.map(m => `
           <div class="month-col" title="${m.key} · ${m.count} 碗">
-            <div class="m-bar" style="height:${Math.max(3, Math.round(m.count / monthMax * 78))}px"></div>
+            <div class="m-bar${m.count ? '' : ' empty'}" style="height:${Math.max(3, Math.round(m.count / monthMax * 78))}px"></div>
             <span class="m-label">${m.label}</span>
           </div>`).join('')}
       </div>
@@ -710,6 +611,10 @@ async function handleSave() {
     renderFilterChips();
     renderList();
     renderActiveView();
+    if (detailOpen) {
+      const fresh = state.records.find(r => r.id === rec.id);
+      if (fresh) renderDetail(fresh);
+    }
     closeForm();
     toast(isEdit ? '已更新' : '已记下这一碗');
   } catch (err) {
@@ -728,11 +633,81 @@ async function handleDelete() {
     renderList();
     renderActiveView();
     closeForm();
+    if (detailOpen) hideDetail();
     toast('已删除');
   } catch (err) {
     console.error(err);
     toast('删除失败');
   }
+}
+
+/* ---------------- Detail ---------------- */
+
+let detailOpen = false;
+
+function fullDate(str) {
+  if (!str) return '未记日期';
+  const [y, m, d] = str.split('-').map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dt.getDay()] || '';
+  return `${y}年${m}月${d}日${wd ? ` · ${wd}` : ''}`;
+}
+
+function detailRec() {
+  return state.records.find(r => r.id === state.detailId) || null;
+}
+
+function renderDetail(rec) {
+  const title = rec.dish || rec.type || '一碗面';
+  const meta = [`@${escapeHtml(rec.shop)}`];
+  if (rec.city) meta.push(escapeHtml(rec.city));
+  if (rec.price != null && rec.price !== '') meta.push(`¥${escapeHtml(rec.price)}`);
+  if (rec.type) meta.push(escapeHtml(rec.type));
+
+  const rating = Number(rec.rating) || 0;
+  const tags = (rec.tags || []).map(t => `<span class="detail-tag">#${escapeHtml(t)}</span>`).join('');
+  const mediaStyle = rec.photo ? ` style="background-image:url('${rec.photo}')"` : '';
+  const emoji = TYPE_EMOJI[rec.type] || '🍜';
+
+  $('#detail-body').innerHTML = `
+    <div class="detail-media${rec.photo ? '' : ' no-photo'}"${mediaStyle}>
+      ${rec.photo ? '' : `<span class="entry-emoji">${emoji}</span>`}
+    </div>
+    <div class="detail-info">
+      <div class="detail-date">${fullDate(rec.date)}</div>
+      <h1 class="detail-title">${escapeHtml(title)}</h1>
+      <div class="detail-meta">${meta.join('<span class="dot">·</span>')}</div>
+      <div class="detail-rating">
+        ${bowlsHtml(rating)}
+        ${rating ? `<span class="detail-rating-label">${RATING_LABELS[rating] || ''}</span>` : ''}
+      </div>
+      ${tags ? `<div class="detail-tags">${tags}</div>` : ''}
+      ${rec.notes ? `<p class="detail-notes">${escapeHtml(rec.notes)}</p>` : ''}
+    </div>
+    <div class="detail-actions">
+      <button class="detail-share-btn" id="detail-share">
+        <svg><use href="#i-share"/></svg>分享这碗
+      </button>
+    </div>`;
+}
+
+function openDetail(rec) {
+  state.detailId = rec.id;
+  renderDetail(rec);
+  $('#detail-sheet').hidden = false;
+  detailOpen = true;
+  try { history.pushState({ detail: true }, ''); } catch (_) { /* file:// */ }
+}
+
+function hideDetail() {
+  $('#detail-sheet').hidden = true;
+  detailOpen = false;
+  state.detailId = null;
+}
+
+function closeDetail() {
+  if (history.state && history.state.detail) history.back();
+  else hideDetail();
 }
 
 /* ---------------- Photo ---------------- */
@@ -786,37 +761,35 @@ function drawPoster(year, recs) {
   const ctx = canvas.getContext('2d');
   const sans = (size, weight = '400') =>
     `${weight} ${size}px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif`;
-  const serif = (size, weight = '400') =>
-    `${weight} ${size}px "Songti SC","STSong","Noto Serif SC",serif`;
 
   // background
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#f7f1e6');
-  bg.addColorStop(1, '#ece2d3');
+  bg.addColorStop(0, '#ffffff');
+  bg.addColorStop(1, '#f7f7f8');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
   // watermark
-  ctx.fillStyle = 'rgba(178,58,43,.05)';
-  ctx.font = serif(380, '700');
+  ctx.fillStyle = 'rgba(226,59,46,.04)';
+  ctx.font = sans(380, '700');
   ctx.textAlign = 'right';
   ctx.fillText('面', W - 40, 420);
   ctx.textAlign = 'left';
 
   // header
-  ctx.fillStyle = '#b23a2b';
+  ctx.fillStyle = '#e23b2e';
   ctx.font = sans(26, '600');
   ctx.fillText('面迹 · NOODLE JOURNAL', M, 104);
 
-  ctx.fillStyle = '#26221d';
-  ctx.font = serif(150, '700');
+  ctx.fillStyle = '#141416';
+  ctx.font = sans(150, '700');
   ctx.fillText(year, M - 4, 268);
 
-  ctx.fillStyle = '#6b6257';
-  ctx.font = serif(44);
+  ctx.fillStyle = '#5e5e64';
+  ctx.font = sans(42, '600');
   ctx.fillText('我的吃面年报', M, 332);
 
-  ctx.fillStyle = '#b23a2b';
+  ctx.fillStyle = '#e23b2e';
   ctx.fillRect(M, 366, 120, 6);
 
   // headline stats
@@ -832,26 +805,26 @@ function drawPoster(year, recs) {
   const colW = (W - 2 * M) / 4;
   stats.forEach(([label, value, unit], i) => {
     const x = M + i * colW;
-    ctx.fillStyle = '#26221d';
-    ctx.font = serif(58, '700');
+    ctx.fillStyle = '#141416';
+    ctx.font = sans(58, '700');
     ctx.fillText(value, x, 488);
     const vw = ctx.measureText(value).width;
     if (unit) {
-      ctx.fillStyle = '#9a9083';
+      ctx.fillStyle = '#9a9aa1';
       ctx.font = sans(24);
       ctx.fillText(unit, x + vw + 6, 488);
     }
-    ctx.fillStyle = '#9a9083';
+    ctx.fillStyle = '#9a9aa1';
     ctx.font = sans(23);
     ctx.fillText(label, x, 528);
   });
 
   // section helper
   const section = (title, y) => {
-    ctx.fillStyle = '#b23a2b';
-    ctx.font = serif(25, '600');
+    ctx.fillStyle = '#e23b2e';
+    ctx.font = sans(25, '600');
     ctx.fillText(title, M, y);
-    ctx.strokeStyle = '#d8cec0';
+    ctx.strokeStyle = '#ededf0';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(M, y + 24);
@@ -867,13 +840,13 @@ function drawPoster(year, recs) {
   section('最常去的店', 612);
   topShops.forEach(([shop, n], i) => {
     const y = 676 + i * 54;
-    ctx.fillStyle = '#b8ada2';
-    ctx.font = serif(23, '600');
+    ctx.fillStyle = '#b9b9bf';
+    ctx.font = sans(23, '600');
     ctx.fillText(String(i + 1).padStart(2, '0'), M, y);
-    ctx.fillStyle = '#26221d';
-    ctx.font = serif(32, '600');
+    ctx.fillStyle = '#141416';
+    ctx.font = sans(32, '600');
     ctx.fillText(fitText(ctx, shop, 600), M + 56, y);
-    ctx.fillStyle = '#9a9083';
+    ctx.fillStyle = '#9a9aa1';
     ctx.font = sans(23);
     ctx.textAlign = 'right';
     ctx.fillText(`${n} 碗`, W - M, y);
@@ -888,10 +861,10 @@ function drawPoster(year, recs) {
   section('最爱的面型', 874);
   topTypes.forEach(([type, n], i) => {
     const y = 936 + i * 50;
-    ctx.fillStyle = '#26221d';
-    ctx.font = serif(30, '600');
+    ctx.fillStyle = '#141416';
+    ctx.font = sans(30, '600');
     ctx.fillText(fitText(ctx, type, 620), M, y);
-    ctx.fillStyle = '#9a9083';
+    ctx.fillStyle = '#9a9aa1';
     ctx.font = sans(23);
     ctx.textAlign = 'right';
     ctx.fillText(`${n} 碗`, W - M, y);
@@ -904,7 +877,7 @@ function drawPoster(year, recs) {
   const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([t]) => `#${t}`);
 
   section('常用标签', 1104);
-  ctx.fillStyle = '#6b6257';
+  ctx.fillStyle = '#5e5e64';
   ctx.font = sans(27);
   ctx.fillText(fitText(ctx, topTags.join('   ') || '还没有标签', W - 2 * M), M, 1152);
 
@@ -916,26 +889,25 @@ function drawPoster(year, recs) {
 
   section('年度最佳一碗', 1216);
   if (best) {
-    ctx.fillStyle = '#26221d';
-    ctx.font = serif(40, '700');
+    ctx.fillStyle = '#141416';
+    ctx.font = sans(40, '700');
     ctx.fillText(fitText(ctx, best.dish || best.type, 700), M, 1286);
-    ctx.fillStyle = '#6b6257';
+    ctx.fillStyle = '#5e5e64';
     ctx.font = sans(25);
     ctx.fillText(fitText(ctx, `@${best.shop} · 评分 ${best.rating}/5`, 700), M, 1326);
   } else {
-    ctx.fillStyle = '#9a9083';
+    ctx.fillStyle = '#9a9aa1';
     ctx.font = sans(26);
     ctx.fillText('还没有评分', M, 1286);
   }
 
   // footer
-  ctx.fillStyle = '#b23a2b';
+  ctx.fillStyle = '#e23b2e';
   ctx.fillRect(M, 1372, 52, 3);
-  ctx.fillStyle = '#9a9083';
+  ctx.fillStyle = '#9a9aa1';
   ctx.font = sans(23);
-  ctx.fillText('一碗好面，一段路。', M, 1412);
   ctx.textAlign = 'right';
-  ctx.fillText('面迹 · 一碗面的手帐', W - M, 1412);
+  ctx.fillText('面迹 · 面条宇宙正在生成中', W - M, 1412);
   ctx.textAlign = 'left';
 
   return canvas;
@@ -1004,12 +976,10 @@ async function drawBowlCard(rec) {
   const ctx = canvas.getContext('2d');
   const sans = (size, weight = '400') =>
     `${weight} ${size}px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif`;
-  const serif = (size, weight = '400') =>
-    `${weight} ${size}px "Songti SC","STSong","Noto Serif SC",serif`;
 
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#f7f1e6');
-  bg.addColorStop(1, '#ece2d3');
+  bg.addColorStop(0, '#ffffff');
+  bg.addColorStop(1, '#f7f7f8');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
@@ -1029,8 +999,8 @@ async function drawBowlCard(rec) {
     roundRectPath(ctx, pad, pad, photoW, photoH, 28);
     ctx.clip();
     const g = ctx.createLinearGradient(pad, pad, pad + photoW, pad + photoH);
-    g.addColorStop(0, '#f2e4d8');
-    g.addColorStop(1, '#e7cdb8');
+    g.addColorStop(0, '#fff1ef');
+    g.addColorStop(1, '#f4f4f6');
     ctx.fillStyle = g;
     ctx.fillRect(pad, pad, photoW, photoH);
     ctx.font = sans(130);
@@ -1042,8 +1012,8 @@ async function drawBowlCard(rec) {
     ctx.restore();
 
     // faint watermark fills the lower empty space
-    ctx.fillStyle = 'rgba(178,58,43,.045)';
-    ctx.font = serif(360, '700');
+    ctx.fillStyle = 'rgba(226,59,46,.04)';
+    ctx.font = sans(360, '700');
     ctx.textAlign = 'right';
     ctx.fillText('面', W - 36, H - 110);
     ctx.textAlign = 'left';
@@ -1052,19 +1022,19 @@ async function drawBowlCard(rec) {
   const y0 = pad + photoH;
 
   // date · type
-  ctx.fillStyle = '#9a9083';
+  ctx.fillStyle = '#9a9aa1';
   ctx.font = sans(25);
   const dateText = (rec.date || '').replace(/-/g, '.');
   ctx.fillText([dateText, rec.type].filter(Boolean).join('  ·  '), M, y0 + 56);
 
   // dish
-  ctx.fillStyle = '#26221d';
-  ctx.font = serif(64, '700');
+  ctx.fillStyle = '#141416';
+  ctx.font = sans(62, '700');
   ctx.fillText(fitText(ctx, rec.dish || rec.type || '一碗面', W - 2 * M), M, y0 + 136);
 
   // shop
-  ctx.fillStyle = '#b23a2b';
-  ctx.font = serif(32, '600');
+  ctx.fillStyle = '#e23b2e';
+  ctx.font = sans(31, '600');
   ctx.fillText(fitText(ctx, `@${rec.shop}`, W - 2 * M), M, y0 + 192);
 
   // rating bowls
@@ -1074,30 +1044,30 @@ async function drawBowlCard(rec) {
     const x = M + i * 44;
     ctx.beginPath();
     ctx.arc(x + 14, ry, 14, 0, Math.PI, false);
-    ctx.fillStyle = i < rating ? '#b23a2b' : '#ddd3c5';
+    ctx.fillStyle = i < rating ? '#e23b2e' : '#e3e3e6';
     ctx.fill();
     ctx.beginPath();
     ctx.moveTo(x, ry);
     ctx.lineTo(x + 28, ry);
-    ctx.strokeStyle = i < rating ? '#b23a2b' : '#ddd3c5';
+    ctx.strokeStyle = i < rating ? '#e23b2e' : '#e3e3e6';
     ctx.lineWidth = 3;
     ctx.stroke();
   }
-  ctx.fillStyle = '#9a9083';
+  ctx.fillStyle = '#9a9aa1';
   ctx.font = sans(24);
   ctx.fillText(rating ? `${rating}/5` : '未评分', M + 5 * 44 + 12, ry + 2);
 
   // tags
   const tags = (rec.tags || []).map(t => `#${t}`).join('   ');
   if (tags) {
-    ctx.fillStyle = '#6b6257';
+    ctx.fillStyle = '#5e5e64';
     ctx.font = sans(27);
     ctx.fillText(fitText(ctx, tags, W - 2 * M), M, y0 + 314);
   }
 
   // divider
   const divY = y0 + (tags ? 356 : 300);
-  ctx.strokeStyle = '#d8cec0';
+  ctx.strokeStyle = '#ededf0';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(M, divY);
@@ -1106,7 +1076,7 @@ async function drawBowlCard(rec) {
 
   // notes
   if (rec.notes) {
-    ctx.fillStyle = '#3f382f';
+    ctx.fillStyle = '#2f2f33';
     ctx.font = sans(31);
     const lines = wrapText(ctx, rec.notes, W - 2 * M, img ? 4 : 5);
     lines.forEach((line, i) => ctx.fillText(line, M, divY + 62 + i * 50));
@@ -1115,13 +1085,13 @@ async function drawBowlCard(rec) {
   // price / place
   const metaY = 1300;
   if (rec.price != null && rec.price !== '') {
-    ctx.fillStyle = '#26221d';
-    ctx.font = serif(32, '700');
+    ctx.fillStyle = '#141416';
+    ctx.font = sans(32, '700');
     ctx.fillText(`¥${rec.price}`, M, metaY);
   }
   const place = rec.city || '';
   if (place) {
-    ctx.fillStyle = '#9a9083';
+    ctx.fillStyle = '#9a9aa1';
     ctx.font = sans(25);
     ctx.textAlign = 'right';
     ctx.fillText(place, W - M, metaY);
@@ -1129,13 +1099,12 @@ async function drawBowlCard(rec) {
   }
 
   // footer
-  ctx.fillStyle = '#b23a2b';
+  ctx.fillStyle = '#e23b2e';
   ctx.fillRect(M, 1372, 52, 3);
-  ctx.fillStyle = '#9a9083';
+  ctx.fillStyle = '#9a9aa1';
   ctx.font = sans(23);
-  ctx.fillText('一碗好面，一段路。', M, 1412);
   ctx.textAlign = 'right';
-  ctx.fillText('面迹 · 一碗面的手帐', W - M, 1412);
+  ctx.fillText('面迹 · 面条宇宙正在生成中', W - M, 1412);
   ctx.textAlign = 'left';
 
   return canvas;
@@ -1333,6 +1302,18 @@ function bindEvents() {
   $('#form-save').addEventListener('click', handleSave);
   $('#form-delete').addEventListener('click', handleDelete);
 
+  // Detail
+  $('#detail-close').addEventListener('click', closeDetail);
+  $('#detail-edit').addEventListener('click', () => {
+    const rec = detailRec();
+    if (rec) openForm(rec);
+  });
+  $('#detail-body').addEventListener('click', e => {
+    if (!e.target.closest('#detail-share')) return;
+    const rec = detailRec();
+    if (rec) openBowlCard(rec);
+  });
+
   // Type & rating pickers
   $('#type-picker').addEventListener('click', e => {
     if (e.target.closest('[data-add-type]')) {
@@ -1419,10 +1400,11 @@ function bindEvents() {
   });
   $('#btn-clear').addEventListener('click', clearAll);
 
-  // Back button closes the form
+  // Back button closes the topmost layer
   window.addEventListener('popstate', () => {
     if (!$('#poster-sheet').hidden) $('#poster-sheet').hidden = true;
-    if (formOpen) hideForm();
+    else if (formOpen) hideForm();
+    else if (detailOpen) hideDetail();
   });
 
   // Keyboard escape
@@ -1431,6 +1413,7 @@ function bindEvents() {
     if (!$('#poster-sheet').hidden) $('#poster-sheet').hidden = true;
     else if (!$('#menu-sheet').hidden) closeMenu();
     else if (formOpen) closeForm();
+    else if (detailOpen) closeDetail();
   });
 }
 
@@ -1446,17 +1429,6 @@ async function init() {
   renderTypePicker();
   renderList();
   renderActiveView();
-
-  if (window.ResizeObserver) {
-    new ResizeObserver(() => {
-      if (state.view === 'list') drawNoodleStrand();
-    }).observe($('#cards'));
-  }
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(() => {
-      if (state.view === 'list') drawNoodleStrand();
-    });
-  }
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     // When a new shell takes over, reload once so index.html and app.js

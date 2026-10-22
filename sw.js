@@ -1,6 +1,6 @@
 // App-shell cache. Bump CACHE on every deploy that touches shell files,
 // so the new version installs atomically instead of mixing old/new files.
-const CACHE = 'mianji-v4';
+const CACHE = 'mianji-v5';
 const ASSETS = [
   './',
   './index.html',

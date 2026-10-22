@@ -1,5 +1,5 @@
 {
-  "name": "面迹 · 一碗面的手帐",
+  "name": "面迹 · 面条宇宙正在生成中",
   "short_name": "面迹",
   "description": "记录每一碗吃过的面：店、面、评分、价格、地点和一句话。",
   "lang": "zh-CN",
@@ -7,8 +7,8 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f2ece1",
-  "theme_color": "#b23a2b",
+  "background_color": "#ffffff",
+  "theme_color": "#e23b2e",
   "icons": [
     {
       "src": "icons/icon-192.png",
