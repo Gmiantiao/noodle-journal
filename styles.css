@@ -123,6 +123,7 @@ input, textarea { font: inherit; color: inherit; }
   display: none;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding-bottom: calc(var(--tab-h) + var(--safe-b) + 28px);
 }
@@ -827,7 +828,7 @@ input, textarea { font: inherit; color: inherit; }
   background: var(--red);
   min-height: 3px;
 }
-.month-col .m-bar.empty { background: var(--surface-2); }
+.month-col .m-bar.zero { background: var(--surface-2); }
 .month-col .m-label { font-size: 9.5px; color: var(--ink-3); white-space: nowrap; }
 
 .rank { display: flex; flex-direction: column; }

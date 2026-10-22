@@ -375,11 +375,11 @@ function renderStats() {
     </div>` : ''}
 
     <div class="panel">
-      <h3>最近一年</h3>
+      <h3>最近一年 <span class="h3-note">每月碗数</span></h3>
       <div class="month-chart">
         ${months.map(m => `
           <div class="month-col" title="${m.key} · ${m.count} 碗">
-            <div class="m-bar${m.count ? '' : ' empty'}" style="height:${Math.max(3, Math.round(m.count / monthMax * 78))}px"></div>
+            <div class="m-bar${m.count ? '' : ' zero'}" style="height:${Math.max(3, Math.round(m.count / monthMax * 78))}px"></div>
             <span class="m-label">${m.label}</span>
           </div>`).join('')}
       </div>
