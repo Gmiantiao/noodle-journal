@@ -48,7 +48,9 @@ db.js               IndexedDB 封装
 sw.js               Service Worker，缓存应用外壳
 manifest.webmanifest
 icons/              主屏幕图标
+share/              分享卡片与二维码（生成物）
 tools/make-icons.py 图标生成脚本（Pillow）
+tools/make-share.py 分享卡片生成脚本（Pillow + qrcode）
 mockup/index.html   7 月的设计原型（保留，不参与运行）
 ```
 
